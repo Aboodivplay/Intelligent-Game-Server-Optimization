@@ -1,0 +1,155 @@
+/* Minecraft workspace. All colors and layout are scoped to this game. */
+.minecraft-theme {
+  --background: #10171a;
+  --surface: #1a2428;
+  --border: #344247;
+  --text: #edf1e8;
+  --muted: #a6b5b8;
+  --green: #b2df85;
+  --cyan: #8ed8e6;
+  background: var(--background);
+  color: var(--text);
+}
+.minecraft-theme .workspace-header { min-height:72px; padding:18px 32px; background:#121b1f; border-bottom:1px solid #354348; }
+.minecraft-theme .brand { color:#edf1e8; }
+.minecraft-theme .user-label { color:#a6b5b8; font-size:12px; }
+
+/* The landscape stays still; only the small water reflections move. */
+.mc-panorama { height:230px; position:relative; overflow:hidden; isolation:isolate; border-bottom:1px solid #526650; background:#284b50; }
+.voxel-landscape { position:absolute; inset:0; width:100%; height:100%; }
+.mc-panorama::after { content:''; position:absolute; inset:0; background:linear-gradient(90deg,#101f28 0%,#122730e8 27%,#18343b88 48%,transparent 75%); z-index:1; pointer-events:none; }
+.panorama-copy { position:absolute; top:42px; left:40px; z-index:3; }
+.edition-label { display:flex; align-items:center; gap:10px; color:#b8d4c9; font-size:10px; font-weight:650; letter-spacing:2.5px; }
+.edition-label i { width:4px; height:4px; background:#b4db85; }
+.panorama-copy strong { display:block; margin-top:9px; color:#eff3df; font:900 clamp(34px,4.5vw,58px)/1.2 'Segoe UI',sans-serif; letter-spacing:2px; text-shadow:0 4px 0 #243b34,0 6px 0 #101b19; }
+.panorama-copy p { margin:13px 0 0; color:#c2d0cc; font-size:14px; letter-spacing:.3px; }
+.panorama-caption { position:absolute; right:28px; bottom:16px; color:#e0ead5; background:#162d30b8; padding:5px 9px; font:9px Consolas,monospace; letter-spacing:1px; z-index:3; }
+.panorama-block { position:absolute; left:49%; top:80px; width:100px; height:100px; z-index:2; perspective:600px; }
+.panorama-block .grass-block { top:0; left:0; scale:.75; transform:rotateX(-22deg) rotateY(-34deg); image-rendering:pixelated; }
+.lake-reflections { animation:lakeDrift 12s ease-in-out infinite alternate; }
+@keyframes lakeDrift { to { transform:translateX(24px); opacity:.55; } }
+.motion-paused .lake-reflections { animation-play-state:paused; }
+
+/* Stone surfaces, emerald actions and a consistent navigation rail. */
+.minecraft-theme .workspace { grid-template-columns:230px minmax(0,1fr); min-height:calc(100vh - 302px); }
+.minecraft-theme .workspace-sidebar { min-width:0; padding:27px 17px; background:#141e22; border-right:1px solid #2d3c41; }
+.minecraft-theme .current-game { display:flex; align-items:center; gap:13px; padding:0 9px 24px; margin:0 0 22px; border-bottom:1px solid #2d3c41; }
+.game-texture { width:34px; height:34px; flex-shrink:0; background:url('grass-block.jpg') 33.3333% 50% / 400% 300%; image-rendering:pixelated; border:1px solid #879b59; box-shadow:3px 3px 0 #090f12; }
+.minecraft-theme .current-game strong { display:block; margin:0; font:650 16px 'Segoe UI',sans-serif; color:#e9efde; }
+.minecraft-theme .current-game small { display:block; margin-top:5px; color:#9aaaab; font-size:8px; letter-spacing:1.4px; }
+.nav-label { display:block; margin:0 12px 13px; color:#82979c; font-size:9px; letter-spacing:1.8px; font-weight:650; }
+.minecraft-theme .workspace-sidebar nav { display:grid; gap:7px; }
+.minecraft-theme .workspace-sidebar nav button { display:flex; align-items:center; gap:12px; padding:12px; border:1px solid transparent; border-radius:5px; font-size:12px; color:#b5c1c2; transition:background .15s,color .15s; }
+.workspace-sidebar nav svg { width:18px; height:18px; flex-shrink:0; fill:none; stroke:currentColor; stroke-width:1.5; stroke-linecap:square; stroke-linejoin:round; }
+.minecraft-theme .workspace-sidebar nav button:hover { background:#233135; color:#f3f6ea; }
+.minecraft-theme .workspace-sidebar nav button.active { background:linear-gradient(90deg,#304636,#24352e); border:1px solid #4a6543; border-left:3px solid #b2df85; color:#ccecac; padding-left:10px; box-shadow:0 2px 8px #0002; }
+.sidebar-note { margin:36px 10px 0; display:flex; gap:10px; font-size:11px; color:#c3cebd; }
+.note-square { margin-top:6px; width:7px; height:7px; background:#718b63; flex-shrink:0; }
+.sidebar-note small { display:block; margin-top:7px; font-size:10px; line-height:1.9; color:#93a4a7; }
+.minecraft-theme .workspace-main { padding:32px; max-width:1500px; background:radial-gradient(ellipse at 100% 0,#263e3926,transparent 55%); }
+.minecraft-theme .workspace-title { align-items:flex-end; gap:22px; margin-bottom:25px; }
+.minecraft-theme .workspace-title .eyebrow { color:#a6c38c; font-size:9px; letter-spacing:2px; margin-bottom:10px; }
+.minecraft-theme .workspace-title h1 { font-size:30px; line-height:1.25; font-weight:650; letter-spacing:-.9px; margin-bottom:9px; }
+.minecraft-theme .workspace-title p { color:#a8b8bc; font-size:12px; line-height:1.7; max-width:610px; }
+.minecraft-theme .workspace-title > .actions { flex-shrink:0; gap:10px; }
+.minecraft-theme .button { min-height:38px; border-radius:4px; border:1px solid #46575b; color:#dce6df; background:#263236; box-shadow:inset 0 1px #ffffff0b,0 2px 0 #080e11; font-size:12px; transition:background .15s,border-color .15s; }
+.minecraft-theme .button:hover { border-color:#8ea19a; background:#324247; transform:none; }
+.minecraft-theme .button.primary { background:#b2dc87; color:#1c2c1d; border-color:#c6eba4; box-shadow:inset 0 1px #e7fac9,0 3px 0 #49643b; font-weight:650; }
+.minecraft-theme .button.primary:hover { background:#c4e99e; }
+.minecraft-theme .button.danger { color:#ffb9b0; background:#382929; border-color:#80504d; }
+.minecraft-theme input,.minecraft-theme select,.minecraft-theme textarea { background:#111b20; border-color:#475b60; color:#e7eeea; border-radius:4px; font-size:13px; }
+.minecraft-theme .server-select { max-width:210px; min-height:38px; }
+.minecraft-theme label { color:#bac9c8; }
+.minecraft-theme .text-link { color:#bbd0cb; }
+.minecraft-theme p,.minecraft-theme .field-hint { color:#acbdbf; }
+.minecraft-theme .field-hint { font-size:11px; }
+.minecraft-theme .notice { background:#20332b; border:1px solid #3b5644; border-left:3px solid #a7d47e; border-radius:4px; padding:14px 17px; color:#c3dfad; font-size:11px; }
+.minecraft-theme .notice.amber { background:#342f23; border-color:#665b3c; border-left-color:#ddbb71; color:#e8d2a4; }
+.minecraft-theme .panel,.minecraft-theme .metric,.minecraft-theme .empty-state { background:#1a2529; border:1px solid #34464a; border-radius:7px; box-shadow:0 5px 15px #050c1026,inset 0 1px #ffffff04; }
+.minecraft-theme .panel-heading { padding:20px 23px; background:#1d2a2e; border-color:#34464a; }
+.minecraft-theme .panel h2 { color:#e9eee3; font-size:16px; font-weight:600; }
+.minecraft-theme .panel p { font-size:12px; line-height:1.85; }
+.minecraft-theme .panel-pad { padding:24px; }
+.minecraft-theme .metrics-grid { gap:16px; }
+.minecraft-theme .metric { padding:22px; border-top:2px solid #a3cd79; }
+.minecraft-theme .metric:nth-child(2) { border-top-color:#80c7d5; }
+.minecraft-theme .metric:nth-child(3) { border-top-color:#dbbd79; }
+.minecraft-theme .metric:nth-child(4) { border-top-color:#b6a3d4; }
+.minecraft-theme .metric label { color:#b7c6c9; font-size:11px; }
+.minecraft-theme .metric strong { color:#eff4e9; font-size:33px; margin:12px 0 7px; font-variant-numeric:tabular-nums; }
+.minecraft-theme .metric strong small { color:#b5c6c2; font-size:12px; }
+.minecraft-theme .metric > small { color:#9fb2b6; font-size:10px; }
+.minecraft-theme .definition-list > div,.minecraft-theme .step,.minecraft-theme .setting-row { border-color:#34464a; }
+.minecraft-theme .definition-list dt { color:#9fb4b9; font-size:12px; }
+.minecraft-theme .definition-list dd { color:#e3eadd; font-size:12px; }
+.minecraft-theme th { color:#b2c4c7; background:#152126; font-size:10px; }
+.minecraft-theme td { color:#c5d2d1; font-size:12px; }
+.minecraft-theme td,.minecraft-theme th { border-color:#304247; padding:16px 22px; }
+.minecraft-theme td strong { color:#eef2e8; }
+.minecraft-theme tbody tr:hover { background:#223237; }
+.minecraft-theme .table-note { color:#9bb1b6; font-size:11px; }
+.minecraft-theme .tag { font-size:9px; padding:4px 7px; border-radius:3px; }
+.minecraft-theme .tag.green { color:#c1e99e; border-color:#537042; background:#293d2d; }
+.minecraft-theme .tag.amber { color:#edcf91; border-color:#6d5d38; background:#393222; }
+.minecraft-theme .telemetry-chart { height:265px; padding:19px; }
+.minecraft-theme .telemetry-chart text { fill:#acbec2; font-size:10px; }
+.minecraft-theme .empty-state { padding:54px 28px; background:radial-gradient(ellipse at 50% 0,#35534455,transparent 65%),#192428; }
+.minecraft-theme .empty-symbol { color:#b2dc87; width:68px; height:68px; line-height:64px; margin:0 auto 24px; background:#293c30; border:1px solid #506947; box-shadow:5px 5px 0 #101c19; }
+.minecraft-theme .empty-state h2 { font-size:26px; color:#edf1e4; }
+.minecraft-theme .empty-state p { max-width:490px; color:#b4c4c5; font-size:13px; }
+.minecraft-theme .empty-state .field-hint { font-size:11px; color:#98aeb2; }
+.minecraft-theme .code { background:#0e181d; border-color:#384d53; color:#bad6a6; font-size:12px; }
+.world-maps { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(280px,100%),1fr)); gap:20px; }
+.player-map { width:100%; display:block; min-height:180px; background:#142329; }
+.console-input { display:flex; gap:12px; align-items:center; }
+.console-input input { flex:1; min-width:0; font-family:Consolas,monospace; }
+.console-log { padding:22px; max-height:650px; overflow:auto; background:#111b20; font-family:Consolas,monospace; }
+.console-log article { border-bottom:1px solid #34464a; padding:15px 0; }
+.console-log small { color:#a9c2a4; }
+.console-log pre { white-space:pre-wrap; overflow-wrap:anywhere; margin:10px 0; }
+.command-output { color:#c5d5cd; }
+.danger-zone { margin-top:25px; border-color:#80504d!important; }
+.danger-zone p { margin:16px 0 20px; }
+
+/* Horizontal navigation on smaller screens; content never forces page overflow. */
+@media (min-width:1500px) { .mc-panorama { height:260px; }.panorama-copy { left:55px; top:48px; } }
+@media (max-width:1200px) { .minecraft-theme .workspace-title { align-items:flex-start; flex-direction:column; }.minecraft-theme .workspace-main { padding:26px; } }
+@media (max-width:960px) {
+  .minecraft-theme .workspace { grid-template-columns:minmax(0,1fr); }
+  .minecraft-theme .workspace-sidebar { padding:14px 20px; border-right:0; border-bottom:1px solid #34464a; }
+  .minecraft-theme .current-game,.nav-label,.sidebar-note { display:none; }
+  .minecraft-theme .workspace-sidebar nav { display:flex; overflow-x:auto; max-width:100%; padding-bottom:4px; scrollbar-color:#4b615d #182327; }
+  .minecraft-theme .workspace-sidebar nav button { flex-shrink:0; padding:11px 13px; white-space:nowrap; }
+  .minecraft-theme .workspace-sidebar nav button.active { padding-left:11px; }
+  .minecraft-theme .two-columns { grid-template-columns:1fr; }
+  .mc-panorama { height:210px; }.panorama-copy { left:28px; top:39px; }.panorama-block { left:61%; top:80px; }
+}
+@media (max-width:600px) {
+  .minecraft-theme .workspace-header { padding:16px; gap:10px; min-height:68px; }
+  .minecraft-theme .workspace-header .user-label { display:none; }
+  .minecraft-theme .workspace-header .actions { gap:12px; }
+  .minecraft-theme .workspace-header .text-link { font-size:10px; }
+  .minecraft-theme .workspace-header .button { min-height:32px; font-size:10px; padding:6px 9px; }
+  .mc-panorama { height:184px; }.panorama-copy { left:20px; top:30px; }.panorama-copy strong { font-size:35px; letter-spacing:1px; }.panorama-copy p { font-size:12px; }.edition-label { font-size:8px; letter-spacing:1.6px; }
+  .mc-panorama::after { background:linear-gradient(90deg,#10252bed,#17313ab0 55%,#17313a22); }
+  .panorama-block { left:auto; right:4px; top:85px; width:70px; }.panorama-block .grass-block { scale:.43; }
+  .panorama-caption { display:none; }.lake-reflections { animation:none; }
+  .minecraft-theme .workspace-sidebar { padding:10px 12px; }
+  .minecraft-theme .workspace-sidebar nav { gap:5px; }.workspace-sidebar nav svg { width:16px; height:16px; }
+  .minecraft-theme .workspace-sidebar nav button { font-size:11px; gap:8px; }
+  .minecraft-theme .workspace-main { padding:25px 16px; }
+  .minecraft-theme .workspace-title { margin-bottom:23px; gap:17px; }
+  .minecraft-theme .workspace-title h1 { font-size:27px; }
+  .minecraft-theme .workspace-title > .actions { margin-top:0; flex-wrap:wrap; width:100%; }
+  .minecraft-theme .server-select { flex:1; min-width:120px; }
+  .minecraft-theme .metrics-grid { gap:10px; }
+  .minecraft-theme .metric { padding:17px 13px; }.minecraft-theme .metric strong { font-size:27px; }
+  .minecraft-theme .metric > small { font-size:9px; }
+  .minecraft-theme .panel-pad,.minecraft-theme .panel-heading { padding:18px; }
+  .minecraft-theme .panel-heading { flex-wrap:wrap; }
+  .minecraft-theme .empty-state { padding:36px 19px; }.minecraft-theme .empty-state h2 { font-size:23px; }
+  .minecraft-theme .definition-list > div { gap:12px; }
+  .minecraft-theme .setting-row { align-items:flex-start; }
+  .console-input { flex-wrap:wrap; }.console-input button { width:100%; }
+}
+@media (prefers-reduced-motion:reduce) { .lake-reflections { animation:none; } }

@@ -1,7 +1,7 @@
-import { api, openApp, escapeHtml as safe, download, agentEndpoint } from './api.js?v=logo-free-20261025-2';
-import { readEmailAction, sendPasswordReset, changePassword, resendConfirmation } from './session.js?v=logo-free-20261025-2';
-import { landing, authPage, gameSelection } from './pages.js?v=logo-free-20261025-2';
-import { dashboardShell, overview, history, predictions, remediation, agentSetup, settingsPage, livePlayers, consolePage } from './dashboard.js?v=logo-free-20261025-2';
+import { api, openApp, escapeHtml as safe, download, agentEndpoint } from './api.js?v=overworld-20261025-1';
+import { readEmailAction, sendPasswordReset, changePassword, resendConfirmation } from './session.js?v=overworld-20261025-1';
+import { landing, authPage, gameSelection } from './pages.js?v=overworld-20261025-1';
+import { dashboardShell, overview, history, predictions, remediation, agentSetup, settingsPage, livePlayers, consolePage } from './dashboard.js?v=overworld-20261025-1';
 
 // Only navigation and current UI state live here. Server records come from the API.
 let user = null;

@@ -1,4 +1,4 @@
-import { escapeHtml as safe } from './api.js?v=logo-free-20261025-2';
+import { escapeHtml as safe } from './api.js?v=overworld-20261025-1';
 
 export function brand() {
   return '<a class="brand" href="#home"><span>INTELLIGENT GAME<span>SERVER OPTIMIZATION</span></span></a>';

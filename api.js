@@ -1,5 +1,5 @@
-import { config } from './config.js?v=logo-free-20261025-2';
-import { authenticate, currentUser, logout, sessionToken } from './session.js?v=logo-free-20261025-2';
+import { config } from './config.js?v=overworld-20261025-1';
+import { authenticate, currentUser, logout, sessionToken } from './session.js?v=overworld-20261025-1';
 
 const isLocal = ['localhost', '127.0.0.1'].includes(location.hostname);
 export const agentEndpoint = () => config.supabaseUrl ? config.supabaseUrl + '/functions/v1/' + config.functionName + '/telemetry' : '';

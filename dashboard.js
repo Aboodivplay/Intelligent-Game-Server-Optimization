@@ -1,5 +1,5 @@
-import { escapeHtml as safe, agentEndpoint } from './api.js';
-import { brand } from './pages.js';
+import { escapeHtml as safe, agentEndpoint } from './api.js?v=logo-free-20261025-2';
+import { brand } from './pages.js?v=logo-free-20261025-2';
 
 export const dashboardTabs = ['Overview', 'Live players', 'Console', 'Telemetry history', 'Predictions', 'Remediation', 'Agent setup', 'Settings'];
 

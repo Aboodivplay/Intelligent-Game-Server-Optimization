@@ -1,4 +1,4 @@
-import { config } from './config.js';
+import { config } from './config.js?v=logo-free-20261025-2';
 
 // Sessions stay in memory. Closing or refreshing the page requires signing in
 // again; passwords and refresh tokens are never written to browser storage.

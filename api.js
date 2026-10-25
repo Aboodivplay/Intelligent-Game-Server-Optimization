@@ -1,18 +1,39 @@
-// All requests go to the backend. Passwords and session tokens are never saved in JavaScript.
-// GitHub Pages serves the public presentation; the hosted app handles login and private data.
-export const HOSTED_APP = 'https://sentinel-game-server-engine.abdiviwjjdjdjsjjehh.chatgpt.site';
-export const isHosted = location.origin === HOSTED_APP || ['localhost', '127.0.0.1'].includes(location.hostname);
+import { config } from './config.js';
+import { authenticate, currentUser, logout, sessionToken } from './session.js';
+
+const isLocal = ['localhost', '127.0.0.1'].includes(location.hostname);
+export const agentEndpoint = () => config.supabaseUrl ? config.supabaseUrl + '/functions/v1/' + config.functionName + '/telemetry' : '';
 
 export async function api(path, options = {}) {
-  const response = await fetch('/api' + path, {
-    credentials: 'same-origin',
+  // The local preview can exercise the original Worker with an isolated database.
+  // Production always stays on GitHub and uses the independent account service.
+  if (!isLocal && path.startsWith('/auth/')) {
+    if (path === '/auth/me') return { user: await currentUser() };
+    if (path === '/auth/logout') { await logout(); return {}; }
+    return authenticate(path.endsWith('signup') ? 'signup' : 'login', JSON.parse(options.body || '{}'));
+  }
+  const token = isLocal ? '' : await sessionToken();
+  if (!isLocal && !token) {
+    const error = new Error('Please log in to continue.');
+    error.status = 401;
+    throw error;
+  }
+  const endpoint = isLocal ? '/api' : config.supabaseUrl + '/functions/v1/' + config.functionName;
+  const response = await fetch(endpoint + path, {
     ...options,
-    headers: { 'Content-Type': 'application/json', ...options.headers },
-    signal: AbortSignal.timeout(12000),
+    credentials: isLocal ? 'same-origin' : 'omit',
+    cache: 'no-store',
+    referrerPolicy: 'no-referrer',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(!isLocal ? { Authorization: 'Bearer ' + token, apikey: config.publishableKey } : {}),
+      ...options.headers,
+    },
+    signal: AbortSignal.timeout(15000),
   });
   const data = await response.json().catch(() => ({}));
   if (!response.ok) {
-    const error = new Error(data.error || 'The server could not complete this request.');
+    const error = new Error(data.error || 'Unable to complete this request. Please try again.');
     error.status = response.status;
     throw error;
   }
@@ -20,8 +41,7 @@ export async function api(path, options = {}) {
 }
 
 export function openApp(page = 'login') {
-  if (isHosted) location.hash = page;
-  else location.href = HOSTED_APP + '/#' + page;
+  location.hash = page;
 }
 
 export function escapeHtml(value = '') {

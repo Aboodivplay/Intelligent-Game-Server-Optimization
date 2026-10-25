@@ -1,7 +1,7 @@
 import { escapeHtml as safe } from './api.js';
 
 export function brand() {
-  return '<a class="brand" href="#home"><img src="mark.svg" alt=""><span>INTELLIGENT GAME<span>SERVER OPTIMIZATION</span></span></a>';
+  return '<a class="brand" href="#home"><span>INTELLIGENT GAME<span>SERVER OPTIMIZATION</span></span></a>';
 }
 
 export function header(user) {

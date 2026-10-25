@@ -70,7 +70,7 @@ function publicUser(user) {
 export async function authenticate(mode, fields) {
   const email = fields.email.trim().toLowerCase();
   const password = fields.password;
-  const path = mode === 'signup' ? '/signup' : '/token?grant_type=password';
+  const path = mode === 'signup' ? '/signup?redirect_to=' + encodeURIComponent(config.websiteUrl) : '/token?grant_type=password';
   const body = mode === 'signup' ? { email, password, data: { name: fields.name.trim() }, ...await emailProof('signup') } : { email, password };
   const result = await authRequest(path, { body });
   if (!result.access_token) {
@@ -109,7 +109,7 @@ export async function logout() {
 }
 
 export async function sendPasswordReset(email) {
-  await authRequest('/recover?redirect_to=' + encodeURIComponent(location.href.split('#')[0] + '#reset-password'), {
+  await authRequest('/recover?redirect_to=' + encodeURIComponent(config.websiteUrl + '#reset-password'), {
     body: { email: email.trim().toLowerCase(), ...await emailProof('recovery') },
   });
 }
@@ -124,6 +124,10 @@ export async function readEmailAction() {
     history.replaceState(null, '', url.pathname + '#login');
     return null;
   }
+  if (fragment.has('error_code') || fragment.has('error')) {
+    history.replaceState(null, '', url.pathname + '#login');
+    return { linkError: true };
+  }
   if (!code) return null;
   url.searchParams.delete('code');
   history.replaceState(null, '', url.pathname + url.search + '#login');
@@ -131,7 +135,7 @@ export async function readEmailAction() {
   try { proof = JSON.parse(localStorage.getItem(EMAIL_PROOF_KEY) || 'null'); }
   catch { proof = null; }
   localStorage.removeItem(EMAIL_PROOF_KEY);
-  if (!proof || Date.now() - proof.created > 3600000) return null;
+  if (!proof || Date.now() - proof.created > 3600000) return { confirmed: true };
   try {
     const result = await authRequest('/token?grant_type=pkce', { body: { auth_code: code, code_verifier: proof.verifier } });
     acceptSession(result);
@@ -145,4 +149,10 @@ export async function changePassword(password) {
   if (!token) throw new Error('This reset link expired. Request a new one.');
   await authRequest('/user', { method: 'PUT', body: { password } }, token);
   await logout();
+}
+
+export async function resendConfirmation(email) {
+  await authRequest('/resend?redirect_to=' + encodeURIComponent(config.websiteUrl), {
+    body: { type: 'signup', email: email.trim().toLowerCase() },
+  });
 }

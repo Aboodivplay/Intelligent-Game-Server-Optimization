@@ -1,7 +1,7 @@
 import { api, openApp, escapeHtml as safe, download, agentEndpoint } from './api.js';
-import { readEmailAction, sendPasswordReset, changePassword } from './session.js';
+import { readEmailAction, sendPasswordReset, changePassword, resendConfirmation } from './session.js';
 import { landing, authPage, gameSelection } from './pages.js';
-import { dashboardShell, overview, history, predictions, remediation, agentSetup, settingsPage } from './dashboard.js';
+import { dashboardShell, overview, history, predictions, remediation, agentSetup, settingsPage, livePlayers, consolePage } from './dashboard.js';
 
 // Only navigation and current UI state live here. Server records come from the API.
 let user = null;
@@ -55,6 +55,8 @@ async function loadDashboard() {
 function drawDashboard() {
   const server = selectedServer();
   const renderTab = {
+    'Live players': () => livePlayers(dashboard, server),
+    'Console': () => consolePage(dashboard, server),
     'Overview': () => overview(dashboard, server),
     'Telemetry history': () => history(dashboard, server, chartMetric),
     'Predictions': () => predictions(dashboard, server),
@@ -68,6 +70,7 @@ function drawDashboard() {
 
 async function renderRoute() {
   const route = location.hash.slice(1) || 'home';
+  document.body.classList.toggle('minecraft-theme', route === 'minecraft');
   const version = ++routeVersion;
   if (route === 'content') {
     const content = document.getElementById('content');
@@ -206,7 +209,7 @@ function connectServer() {
     try {
       const result = await api('/servers', { method: 'POST', body: JSON.stringify({ name: document.querySelector('#connection-name').value }) });
       serverId = result.server.id;
-      const config = `endpoint: ${agentEndpoint()}\nserver-id: ${serverId}\nagent-key: ${result.agentKey}\ninterval-seconds: 5\n`;
+      const config = `endpoint: ${agentEndpoint()}\nserver-id: ${serverId}\nagent-key: ${result.agentKey}\ninterval-seconds: 5\nplayer-tracking: true\nremote-console:\n  enabled: false\n  allowed-commands: [list, say, time, weather, difficulty, save-all]\n`;
       showModal(`<div class="eyebrow">CONNECTION CREATED</div><h2>Save your agent configuration.</h2><p>This private key is shown once. Put the file only in your Minecraft server’s plugin folder. It permits telemetry ingestion for this server, not account access.</p><pre class="code">${safe(config)}</pre><div class="actions"><button class="button" data-close>Close</button><button class="button primary" id="download-config">↓ Download config.yml</button></div>`);
       document.querySelector('#download-config').onclick = () => download('config.yml', config, 'text/yaml');
       await loadDashboard();
@@ -233,6 +236,14 @@ function bindControls() {
   document.querySelectorAll('[data-open]').forEach(button => button.onclick = event => { event.preventDefault(); openApp(button.dataset.open); });
   document.querySelector('[data-game="minecraft"]')?.addEventListener('click', () => { activeTab = 'Overview'; location.hash = 'minecraft'; });
   document.querySelector('#auth-form')?.addEventListener('submit', submitAuth);
+  document.querySelector('#resend-confirmation')?.addEventListener('click',async event=>{
+    const email=document.querySelector('#email');
+    if(!email.checkValidity()){email.reportValidity();return;}
+    event.currentTarget.disabled=true;
+    try{await resendConfirmation(email.value);toast('If confirmation is needed, a new link will arrive. Open the latest email.');}
+    catch(error){toast(error.message);}
+    finally{event.currentTarget.disabled=false;}
+  });
   document.querySelector('#forgot-password')?.addEventListener('click', passwordResetDialog);
   document.querySelector('#password')?.addEventListener('input', event => {
     const guide = document.querySelector('#password-guide');
@@ -277,11 +288,42 @@ function bindControls() {
       event.currentTarget.disabled = true;
       try {
         const result = await api('/servers/' + serverId + '/key', { method: 'POST' });
-        const configuration = `endpoint: ${agentEndpoint()}\nserver-id: ${serverId}\nagent-key: ${result.agentKey}\ninterval-seconds: 5\n`;
+        const configuration = `endpoint: ${agentEndpoint()}\nserver-id: ${serverId}\nagent-key: ${result.agentKey}\ninterval-seconds: 5\nplayer-tracking: true\nremote-console:\n  enabled: false\n  allowed-commands: [list, say, time, weather, difficulty, save-all]\n`;
         showModal('<h2>New configuration ready.</h2><p>Your old key has been disabled. Save this configuration now; the key will not be shown again.</p><div class="actions"><button class="button" data-close>Close</button><button class="button primary" id="download-new-config">Download config.yml</button></div>');
         document.querySelector('#download-new-config').onclick = () => download('config.yml', configuration, 'text/yaml');
         await loadDashboard(); drawDashboard();
       } catch (error) { toast(error.message); modal.close(); }
+    };
+  });
+  document.querySelector('#export-training')?.addEventListener('click',async()=>{
+    try{const data=await api('/servers/'+serverId+'/training');download('minecraft-training.json',JSON.stringify(data,null,2));}catch(error){toast(error.message);}
+  });
+  document.querySelector('#label-incident')?.addEventListener('click',()=>{
+    showModal('<h2>Label a confirmed server incident</h2><p>Record the observed failure time. Do not label client crashes as server crashes.</p><form id="incident-form"><label for="incident-kind">Incident</label><select id="incident-kind"><option value="severe_lag">Severe server lag</option><option value="crash">Server crash</option></select><label for="incident-time">Observed time (your local time)</label><input id="incident-time" type="datetime-local" required><div class="actions"><button class="button" type="button" data-close>Cancel</button><button class="button primary" type="submit">Save incident label</button></div></form>');
+    document.querySelector('#incident-form').onsubmit=async event=>{
+      event.preventDefault();event.currentTarget.querySelector('[type=submit]').disabled=true;
+      try{await api('/servers/'+serverId+'/incidents',{method:'POST',body:JSON.stringify({kind:document.querySelector('#incident-kind').value,occurredAt:new Date(document.querySelector('#incident-time').value).toISOString()})});modal.close();toast('Incident label saved.');}
+      catch(error){toast(error.message);event.currentTarget.querySelector('[type=submit]').disabled=false;}
+    };
+  });
+  document.querySelector('#delete-server')?.addEventListener('click', () => {
+    const server=selectedServer();
+    showModal(`<h2>Delete ${safe(server.name)}?</h2><p>Permanently removes its saved telemetry, command history and agent key. Your Minecraft world remains on your server.</p><form id="delete-form"><label for="delete-name">Type the exact server name</label><input id="delete-name" autocomplete="off" required><div class="actions"><button class="button" type="button" data-close>Cancel</button><button class="button danger" type="submit">Permanently delete connection</button></div></form>`);
+    document.querySelector('#delete-form').onsubmit=async event=>{
+      event.preventDefault();const name=document.querySelector('#delete-name').value;
+      if(name!==server.name)return toast('The server name does not match.');
+      event.currentTarget.querySelector('[type=submit]').disabled=true;
+      try{await api('/servers/'+server.id,{method:'DELETE',body:JSON.stringify({confirmName:name})});modal.close();serverId='';await loadDashboard();activeTab='Overview';drawDashboard();toast('Server connection deleted.');}
+      catch(error){toast(error.message);modal.close();}
+    };
+  });
+  document.querySelector('#command-form')?.addEventListener('submit',event=>{
+    event.preventDefault();const command=document.querySelector('#command-input').value.trim();
+    showModal(`<h2>Run this server command?</h2><pre class="code">${safe(command)}</pre><p>It will run on ${safe(selectedServer().name)}. Review its effect before sending.</p><div class="actions"><button class="button" data-close>Cancel</button><button class="button primary" id="send-command">Send to Minecraft</button></div>`);
+    document.querySelector('#send-command').onclick=async event=>{
+      event.currentTarget.disabled=true;
+      try{await api('/servers/'+serverId+'/commands',{method:'POST',body:JSON.stringify({command})});modal.close();await loadDashboard();drawDashboard();toast('Command queued. Waiting for the agent.');}
+      catch(error){toast(error.message);modal.close();}
     };
   });
   document.querySelector('#policy-form')?.addEventListener('submit', async event => {
@@ -325,5 +367,7 @@ async function start() {
     catch { user = null; }
   }
   await renderRoute();
+  if (emailAction?.linkError) toast('This email link expired or is invalid. Request a new confirmation or password reset.');
+  if (emailAction?.confirmed) toast('Email link opened. Please log in; this browser has no matching signup session.');
 }
 start();

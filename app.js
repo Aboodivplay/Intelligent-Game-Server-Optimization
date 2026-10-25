@@ -1,61 +1,235 @@
-'use strict';
-const $=s=>document.querySelector(s), esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const nav=[['overview','◫','Overview'],['servers','▤','Servers'],['predictions','⌁','Predictions & alerts'],['remediation','⛨','Remediation'],['history','◷','Telemetry history'],['model','⟐','Model & evaluation'],['settings','⚙','Settings'],['project','▧','About the project']];
-const defaults={threshold:80,interval:3,retention:30,auto:false,override:true,notifications:true,role:'Administrator',source:'demo',api:''};
-let saved={};try{saved=JSON.parse(localStorage.getItem('sentinel-v1')||'{}')}catch{}
-let settings={...defaults,...saved.settings}, token='', page='overview', range='1h', metric='cpu', search='', statusFilter='all', paused=false, liveData=null, liveError='', lastUpdate=new Date(), polling=false;
-const demoServers=[{id:'survival-01',name:'Survival · Main',type:'Paper 1.21 · Java 21',region:'Amman / JO',cpu:48,memory:64,tps:19.8,entities:1248,players:42,maxPlayers:100,risk:18,status:'healthy',latency:32},{id:'modded-02',name:'Create · Modded',type:'Forge 1.20.1 · Java 17',region:'Frankfurt / DE',cpu:78,memory:86,tps:17.2,entities:2841,players:28,maxPlayers:60,risk:87,status:'warning',latency:61},{id:'lobby-03',name:'Network · Lobby',type:'Paper 1.21 · Java 21',region:'Amman / JO',cpu:22,memory:31,tps:20,entities:326,players:16,maxPlayers:150,risk:7,status:'healthy',latency:24}];
-let servers=structuredClone(demoServers), selected='survival-01';
-let alerts=saved.alerts||[{id:'a1',server:'modded-02',title:'Memory pressure is building',cause:'Heap usage has increased alongside loaded entities. Inspect chunk loaders and dropped items.',confidence:87,horizon:7,severity:'warning',status:'open',time:new Date(Date.now()-180000).toISOString()},{id:'a2',server:'modded-02',title:'Tick degradation detected',cause:'Loaded entity growth correlates with declining TPS. Review high-density chunks.',confidence:83,horizon:9,severity:'warning',status:'open',time:new Date(Date.now()-720000).toISOString()}];
-let audit=saved.audit||[{id:'log1',time:new Date(Date.now()-900000).toISOString(),action:'Agent connected',server:'survival-01',actor:'Demo edge agent',result:'Connected',reversible:false},{id:'log2',time:new Date(Date.now()-1800000).toISOString(),action:'Configuration initialized',server:'all',actor:'Demo administrator',result:'Saved',reversible:false}];
-let series=[];for(let i=0;i<60;i++)series.push({timestamp:new Date(Date.now()-(59-i)*60000).toISOString(),serverId:'survival-01',cpu:Math.round(42+Math.sin(i*.44)*9+Math.cos(i*.91)*5),memory:Math.round(57+i*.12+Math.sin(i*.2)*2),tps:+(19.6+Math.sin(i*.3)*.35).toFixed(2),entities:Math.round(1130+i*2+Math.sin(i*.21)*60)});
-const initialSeries=structuredClone(series);
-function persist(){localStorage.setItem('sentinel-v1',JSON.stringify({settings:{...settings,source:'demo'},alerts:settings.source==='demo'?alerts:undefined,audit:settings.source==='demo'?audit:undefined}))}
-function toast(s){$('#toast').textContent=s;$('#toast').classList.add('show');clearTimeout(toast.timer);toast.timer=setTimeout(()=>$('#toast').classList.remove('show'),3500)}
-function log(action,server,result,reversible=false,details={}){audit.unshift({id:crypto.randomUUID(),time:new Date().toISOString(),action,server,actor:'Demo administrator',result,reversible,...details});audit=audit.slice(0,500);persist()}
-function current(){return servers.find(s=>s.id===selected)||servers[0]||{id:'',name:'No server',cpu:0,memory:0,tps:0,entities:0,players:0,maxPlayers:0,risk:0,status:'offline'}}
-function when(t){const d=new Date(t);return isNaN(d)?'Unknown':d.toLocaleString([], {month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'})}
-function badge(text,type=''){return `<span class="badge ${type}">${esc(text)}</span>`}
-function heading(kicker,title,subtitle,actions=''){return `<div class="page-heading"><div><div class="eyebrow">${kicker}</div><h1>${title}</h1><p>${subtitle}</p></div><div class="actions">${actions}</div></div>`}
-function serverSelect(){return `<select id="server-select" aria-label="Selected server">${servers.map(s=>`<option value="${esc(s.id)}" ${s.id===selected?'selected':''}>${esc(s.name)}</option>`).join('')}</select>`}
-function spark(color='#93ad76'){return `<svg class="spark" viewBox="0 0 80 25" aria-hidden="true"><path d="M0 20 7 16 14 19 21 11 28 14 35 8 42 12 49 6 56 9 63 4 70 8 80 2" fill="none" stroke="${color}" stroke-width="1.5"/></svg>`}
-function metrics(){const s=current();return `<div class="metrics">${[['CPU utilization',s.cpu,'%', 'Across all allocated cores','▥'],['Memory usage',s.memory,'%', 'Allocated Java heap','▣'],['Server tick rate',s.tps,'TPS', '20 TPS target','⌁'],['Loaded entities',Number(s.entities).toLocaleString(),'','In-game state telemetry','◇']].map(([label,v,unit,caption,icon])=>`<div class="metric"><div class="metric-top">${label}<span class="metric-icon">${icon}</span></div><div class="metric-value">${esc(v)}<small>${unit}</small></div><div class="metric-bottom"><span>${caption}</span>${spark()}</div></div>`).join('')}</div>`}
-function selectedSeries(){if(settings.source==='live')return (liveData?.telemetry||[]).filter(r=>r.serverId===selected);return series.map(r=>({...r,serverId:selected,cpu:Math.min(99,Math.max(1,r.cpu+(current().cpu-48))),memory:Math.min(99,Math.max(1,r.memory+(current().memory-64))),tps:Math.min(20,Math.max(0,r.tps+(current().tps-19.8))),entities:Math.max(0,r.entities+(current().entities-1248))}))}
-function chart(){let data=selectedSeries();const minutes={'15m':15,'1h':60,'6h':360,'24h':1440}[range];data=data.filter(r=>new Date(r.timestamp)>Date.now()-minutes*60000);if(!data.length)return '<div class="empty">No telemetry in this time range.</div>';let max=metric==='tps'?20:metric==='entities'?Math.max(1500,...data.map(r=>r.entities))*1.1:100;const pts=data.map((r,i)=>[45+i/Math.max(1,data.length-1)*615,180-Number(r[metric])/max*155]);const path=pts.map((p,i)=>(i?'L':'M')+p.join(',')).join(' ');let grid='';for(let i=0;i<5;i++){let y=25+i*38.75;grid+=`<line x1="45" y1="${y}" x2="660" y2="${y}" stroke="#edf0e7" stroke-dasharray="3 4"/><text x="6" y="${y+3}">${Math.round(max*(1-i/4))}${metric==='cpu'||metric==='memory'?'%':''}</text>`}for(let i=0;i<5;i++){let row=data[Math.round((data.length-1)*i/4)];grid+=`<text x="${45+i*153.75}" y="208" text-anchor="${i===0?'start':i===4?'end':'middle'}">${esc(new Date(row.timestamp).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}))}</text>`}return `<svg viewBox="0 0 685 220" role="img" aria-label="${esc(metric)} telemetry over ${range}"><defs><linearGradient id="chart-fill" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#a8c18d" stop-opacity=".25"/><stop offset="1" stop-color="#a8c18d" stop-opacity="0"/></linearGradient></defs>${grid}<path d="${path} L${pts.at(-1)[0]},180 L45,180 Z" fill="url(#chart-fill)"/><path d="${path}" fill="none" stroke="#7d9d61" stroke-width="2" stroke-linejoin="round"/><circle cx="${pts.at(-1)[0]}" cy="${pts.at(-1)[1]}" r="3.5" fill="#749957" stroke="#fff" stroke-width="2"/></svg>`}
-function chartPanel(){return `<section class="panel"><div class="panel-head"><div><h2>Performance over time</h2><div class="sub">Hardware signals, in the context of your game.</div></div><div class="segmented">${['15m','1h','6h','24h'].map(r=>`<button data-range="${r}" class="${range===r?'selected':''}">${r}</button>`).join('')}</div></div><div class="chart-legend">${[['cpu','CPU'],['memory','Memory'],['tps','Tick rate'],['entities','Entities']].map(([m,l])=>`<button class="link-button" data-metric="${m}" style="color:${metric===m?'#55763c':'#a0a991'}"><i class="legend-dot" style="background:${metric===m?'#739b5c':'#cdd5c4'}"></i>${l}</button>`).join('')}</div><div class="chart">${chart()}</div><div class="chart-footer"><span>${settings.source==='demo'?'Simulated telemetry · 60-minute sample':'Backend telemetry'} · ${settings.interval}s refresh</span><span>Updated ${lastUpdate.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit',second:'2-digit'})}</span></div></section>`}
-function forecast(){const s=current(),risk=Number(s.risk)||0;return `<section class="panel forecast-panel"><div class="panel-head"><div><h2>Stability forecast</h2><div class="sub">The next 5–10 minutes</div></div><span class="forecast-badge">${settings.source==='demo'?'SIMULATED':'BACKEND'}</span></div><div class="risk-wrap"><div class="risk-ring"><svg viewBox="0 0 100 100"><circle cx="50" cy="50" r="42" stroke="#eaf0df" stroke-width="6" fill="none"/><circle cx="50" cy="50" r="42" stroke="${risk>=settings.threshold?'#bd965c':'#90af68'}" stroke-width="6" fill="none" stroke-dasharray="${risk/100*264} 264" stroke-linecap="round"/></svg><div class="risk-number">${risk}%<small>failure risk</small></div></div><div class="risk-copy"><b>${risk>=settings.threshold?'Needs your attention':'Looking steady'}</b><p>${risk>=settings.threshold?'A predictive alert is ready for review.':'No high-confidence issue for this server.'}</p></div></div><div class="forecast-detail"><div class="detail-row"><span>Prediction window</span><b>5–10 minutes</b></div><div class="detail-row"><span>Alert confidence threshold</span><b>${settings.threshold}%</b></div><div class="detail-row"><span>Inference model</span><b>${settings.source==='demo'?'Demo scenario':esc(liveData?.model?.name||'Not reported')}</b></div></div><div class="forecast-foot">${settings.source==='demo'?'Illustrative forecast. Connect your trained LSTM backend for actual predictions.':'Prediction results are supplied by your connected backend.'}</div></section>`}
-function serverTable(list=servers){return `<div class="table-wrap"><table><thead><tr><th>SERVER</th><th>STATUS</th><th>CPU / RAM</th><th>TICK RATE</th><th>PLAYERS</th><th>FAILURE RISK</th><th></th></tr></thead><tbody>${list.map(s=>`<tr><td><div class="server-cell"><div class="server-art">▦</div><div><b>${esc(s.name)}</b><small>${esc(s.type)}</small></div></div></td><td>${badge(s.status==='healthy'?'Healthy':s.status==='offline'?'Offline':'Attention',s.status==='warning'?'warn':s.status==='offline'?'neutral':'')}</td><td>${s.cpu}% <span style="color:#b6beac">/</span> ${s.memory}%<div class="progress"><span style="width:${s.memory}%;background:${s.memory>80?'#c7a16b':'#98b57b'}"></span></div></td><td>${s.tps} <small style="color:#a2ac96">TPS</small></td><td>${s.players}<span style="color:#a6b09a"> / ${s.maxPlayers}</span></td><td>${badge(s.risk+'%',s.risk>=settings.threshold?'warn':'')}</td><td><button class="link-button" data-server="${esc(s.id)}">Inspect ↗</button></td></tr>`).join('')||'<tr><td colspan="7" class="empty">No servers match your search.</td></tr>'}</tbody></table></div>`}
-function alertList(list=alerts.slice(0,2)){return `<div class="alert-list">${list.map(a=>`<div class="alert-item"><div class="alert-icon">!</div><div class="alert-body"><h3>${esc(a.title)}</h3><p>${esc(servers.find(s=>s.id===a.server)?.name||a.server)} · ${a.confidence}% confidence · ${a.horizon}-minute horizon</p><span class="alert-meta">${when(a.time)} · ${esc(a.status)}</span></div><button class="link-button" data-alert="${esc(a.id)}">Review ↗</button></div>`).join('')||'<div class="empty">No alerts to review.</div>'}</div>`}
-function activity(){return `<div class="activity">${audit.slice(0,3).map(a=>`<div class="activity-item"><span class="activity-icon">↗</span><div><b>${esc(a.action)}</b><p>${esc(a.server)} · ${esc(a.result)}</p></div><span class="activity-time">${new Date(a.time).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}</span></div>`).join('')}</div>`}
-function overview(){const s=current();return heading('Command center','A clearer view. A steadier server.','Your infrastructure and game state, working together.',`${serverSelect()}<button class="button" id="pause">${paused?'▶ Resume':'Ⅱ Pause'}</button><button class="button primary" data-export="json">↓ Export report</button>`)+`<div class="hero"><div class="hero-copy"><span class="hero-symbol">⛨</span><div><h2>${s.risk>=settings.threshold?'One step ahead of the next slowdown.':'Your server has room to breathe.'}</h2><p>${esc(s.name)} · ${s.players} players online · ${settings.override?'Manual override is enabled. You stay in control.':'Remediation follows your configured rules.'}</p></div></div><div class="hero-side"><span>${settings.source==='demo'?'All values are simulated':'Connected to backend'}</span><span class="live"><span class="status-dot"></span>${paused?'PAUSED':settings.source==='demo'?'DEMO STREAM':'API CONNECTED'}</span></div></div>`+metrics()+`<div class="grid-main">${chartPanel()}${forecast()}</div><section class="panel" style="margin-bottom:23px"><div class="panel-head"><div><h2>Your servers <span style="color:#a1ac91;font-size:11px;margin-left:7px">${servers.length}</span></h2><div class="sub">A quick pulse check across your network.</div></div><a class="link-button" href="#servers">Manage servers ↗</a></div>${serverTable()}</section><div class="lower-grid"><section class="panel"><div class="panel-head"><h2>Worth your attention</h2><a class="link-button" href="#predictions">All alerts ↗</a></div>${alertList(alerts.filter(a=>a.status==='open').slice(0,2))}</section><section class="panel"><div class="panel-head"><h2>Recent activity</h2><a class="link-button" href="#remediation">View audit log ↗</a></div>${activity()}</section></div>`}
-function serversPage(){let filtered=servers.filter(s=>(s.name+' '+s.id+' '+s.type).toLowerCase().includes(search.toLowerCase())&&(statusFilter==='all'||s.status===statusFilter));return heading('Infrastructure','Your server network','Monitor Java servers without touching core engine code.',`<button class="button primary" id="connect-agent">+ Connect an agent</button>`)+`<div class="filters"><input id="search" type="search" placeholder="Find a server…" value="${esc(search)}" aria-label="Find a server"><select id="status-filter" aria-label="Server status"><option value="all">All statuses</option><option value="healthy" ${statusFilter==='healthy'?'selected':''}>Healthy</option><option value="warning" ${statusFilter==='warning'?'selected':''}>Needs attention</option></select></div><section class="panel">${serverTable(filtered)}</section><div class="note" style="margin-top:22px">${settings.source==='demo'?'These three demonstration servers illustrate the target Minecraft Java environment. Use Settings → Connection to load servers from your real Python API.':'Servers are read from your authenticated backend. Register agents using your backend provisioning process.'}</div>`}
-function predictionsPage(){return heading('Early warning','See the issue before your players do.','Review confidence, context, and the suggested response.',`<select id="alert-filter" aria-label="Filter alerts"><option value="all">All alerts</option><option value="open">Open</option><option value="acknowledged">Acknowledged</option><option value="resolved">Resolved</option></select>${settings.source==='demo'?'<button class="button primary" id="scenario">+ Run stress scenario</button>':''}`)+`<div class="note">Only predictions above your ${settings.threshold}% confidence threshold generate new demo alerts. Missing telemetry should make a backend prediction unreliable, never confident.</div><section class="panel" id="alerts-panel">${alertList(alerts)}</section>`}
-function toggle(name,on,label){return `<button class="switch ${on?'on':''}" data-toggle="${name}" role="switch" aria-checked="${on}" aria-label="${label}"><span></span></button>`}
-function remediationPage(){return heading('Human in the loop','Automation, with your hand on the switch.','Review actions, enforce safety rules, and keep a clear audit trail.')+`<div class="grid-main"><section class="panel content-pad"><h2>Remediation controls</h2><div class="setting-row"><div><b>Manual override</b><p>Immediately halt automatic actions. Manual review remains available.</p></div>${toggle('override',settings.override,'Manual override')}</div><div class="setting-row"><div><b>Automatic remediation</b><p>Allow configured actions only above the confidence threshold.</p></div>${toggle('auto',settings.auto,'Automatic remediation')}</div><div class="setting-row"><div><b>Request Java garbage collection</b><p>May reduce heap pressure; it can also introduce a pause. It cannot be rolled back.</p></div>${badge('Manual approval','warn')}</div><div class="setting-row"><div><b>Clear dropped entities</b><p>Removal is irreversible without a backend snapshot. Manual approval required.</p></div>${badge('Disabled','neutral')}</div><div style="margin-top:20px" class="actions"><button class="button primary" id="manual-action">Review a proposed action</button></div></section><section class="panel content-pad"><h2>Execution policy</h2><p style="font-size:12px;margin-top:14px">${settings.override?'Manual override is active. All automatic execution is blocked.':settings.auto?'Only verified reversible actions can execute automatically.':'Automatic execution is off. Actions require review.'}</p><div class="note">${settings.source==='demo'?'Demo actions affect simulated state only. No game server command is sent.':'The backend must enforce authorization, override state, confidence thresholds, and action safety independently of this interface.'}</div><h3>Automatic action allowlist</h3><p style="font-size:11px">Pause nonessential telemetry sampling (reversible). Garbage collection and entity removal are excluded from automatic execution.</p></section></div><section class="panel"><div class="panel-head"><h2>Audit trail</h2><button class="link-button" data-export="audit">↓ Export JSON</button></div><div class="table-wrap"><table><thead><tr><th>TIME</th><th>ACTION</th><th>SERVER</th><th>RESULT</th><th></th></tr></thead><tbody>${audit.map(a=>`<tr><td>${when(a.time)}</td><td>${esc(a.action)}</td><td>${esc(a.server)}</td><td>${badge(a.result,a.result==='Rejected'?'neutral':'')}</td><td>${a.reversible&&!a.rolledBack?`<button class="link-button" data-rollback="${esc(a.id)}">Rollback ↶</button>`:''}</td></tr>`).join('')}</tbody></table></div></section>`}
-function historyPage(){const rows=selectedSeries();return heading('Historical context','Every signal tells part of the story.','Inspect telemetry windows and export data for external analysis.',`${serverSelect()}<button class="button" data-export="csv">↓ CSV</button><button class="button primary" data-export="json">↓ JSON</button>`)+chartPanel()+`<section class="panel" style="margin-top:22px"><div class="panel-head"><div><h2>Telemetry windows</h2><div class="sub">${rows.length} samples available · retention setting ${settings.retention} days</div></div></div><div class="table-wrap"><table><thead><tr><th>TIMESTAMP</th><th>CPU</th><th>MEMORY</th><th>TPS</th><th>ENTITIES</th></tr></thead><tbody>${rows.slice().reverse().slice(0,100).map(r=>`<tr><td>${when(r.timestamp)}</td><td>${r.cpu}%</td><td>${r.memory}%</td><td>${r.tps}</td><td>${Number(r.entities).toLocaleString()}</td></tr>`).join('')||'<tr><td colspan="5" class="empty">No samples available.</td></tr>'}</tbody></table></div></section>`}
-function modelPage(){const m=liveData?.model;return heading('Prediction engine','A model you can evaluate.','Separate measured performance from research targets.',settings.source==='demo'?'<button class="button primary" id="retrain">Create retraining request</button>':'')+`<div class="note amber">${settings.source==='demo'?'No trained model is bundled. The dashboard uses deterministic simulation scenarios; it does not perform LSTM inference. Model training, validation and real predictions belong to the Python backend.':'Model information below is reported by the backend; verify metrics against a held-out labeled dataset.'}</div><section class="panel content-pad"><div class="panel-head" style="padding:0 0 22px"><div><h2>${esc(m?.name||'LSTM time-series engine')}</h2><div class="sub">${esc(m?.version||'Architecture specified · weights not connected')}</div></div>${badge(m?'Backend connected':'Awaiting integration','neutral')}</div><div class="stats-list">${[['Precision',m?.precision,'Measure false-positive control'],['Recall',m?.recall,'Measure missed failure events'],['Inference latency',m?.latencyMs,'Target: below 2,000 ms']].map(([label,value,caption])=>`<div class="stat-box">${label}<b>${value==null?'—':esc(value)+(label.includes('latency')?' ms':'%')}</b><small>${caption}</small></div>`).join('')}</div><div class="form-grid" style="margin-top:25px"><div><h3>Input window</h3><p style="font-size:12px">CPU utilization, allocated memory, loaded entities, and server tick rate, sampled every 1–5 seconds. Standardize each feature using the training scaler.</p></div><div><h3>Evaluation protocol</h3><p style="font-size:12px">Use time-ordered training, validation, and test sets. Report precision and recall against labeled failures, monitor drift after patches, and retain model versions.</p></div></div><div class="architecture"><div><b>01 / Collect</b><small>Java edge agent</small></div>→<div><b>02 / Prepare</b><small>Python telemetry windows</small></div>→<div><b>03 / Predict</b><small>Trained LSTM inference</small></div>→<div><b>04 / Review</b><small>Confidence + safe response</small></div></div></section>`}
-function settingsPage(){return heading('Configuration','Make the engine fit your server.','Connection, alert policy, sampling, and dashboard preferences.')+`<form id="settings-form"><div class="grid-main"><section class="panel content-pad"><h2>Connection</h2><p style="font-size:11px">Use demonstration mode, or connect an authenticated HTTPS API.</p><div class="form-grid"><div class="field"><label for="source">Data source</label><select id="source" name="source"><option value="demo" ${settings.source==='demo'?'selected':''}>Demonstration</option><option value="live" ${settings.source==='live'?'selected':''}>Python backend API</option></select></div><div class="field"><label for="role">Demonstration role</label><select id="role" name="role">${['Administrator','Hosting provider','Mod developer'].map(r=>`<option ${settings.role===r?'selected':''}>${r}</option>`).join('')}</select><p>Illustrates UI permissions. Real roles must come from backend authentication.</p></div><div class="field full"><label for="api">Backend base URL</label><input id="api" name="api" type="url" placeholder="https://your-backend.example.com" value="${esc(settings.api)}"><p>The backend must allow this website origin through CORS.</p></div><div class="field full"><label for="token">Bearer access token</label><input id="token" type="password" name="token" autocomplete="off" placeholder="Required for live mode"><p>Held in memory for this session only. Never written to local storage.</p></div></div><div class="actions" style="margin-top:20px"><button type="button" class="button" id="test-api">Test connection</button><button type="button" class="link-button" id="api-contract">View API contract ↗</button></div></section><section class="panel content-pad"><h2>Alert & agent preferences</h2><div class="form-grid" style="margin-top:23px"><div class="field"><label for="threshold">Confidence threshold (%)</label><input id="threshold" name="threshold" type="number" min="50" max="99" value="${settings.threshold}" required></div><div class="field"><label for="interval">Sampling interval (seconds)</label><input id="interval" name="interval" type="number" min="1" max="5" value="${settings.interval}" required></div><div class="field full"><label for="retention">Retention preference (days)</label><select id="retention" name="retention">${[7,14,30,90].map(d=>`<option value="${d}" ${settings.retention===d?'selected':''}>${d} days</option>`).join('')}</select><p>Live retention and edge sampling require backend enforcement. Demo history is stored only in this browser.</p></div></div><div class="setting-row"><div><b>In-app notifications</b><p>Show a message for newly created demo alerts.</p></div>${toggle('notifications',settings.notifications,'In-app notifications')}</div></section></div><div class="actions"><button class="button primary" type="submit">Save configuration</button><button class="button" type="button" id="reset-demo">Reset demonstration</button></div></form>`}
-const requirements=[['FR1','Real-time hardware and game telemetry','Telemetry views'],['FR2','5–10 minute failure predictions','Backend connection'],['FR3','Correlate hardware with game state','Alert context'],['FR4','Dashboard and predictive notifications','Overview & alerts'],['FR5','Role-based authenticated access','Backend required'],['FR6','Non-intrusive panel integration','Agent setup guide'],['FR7','Prediction confidence scores','Alert review'],['FR8','Historical telemetry and prediction logs','History & API'],['FR9','Preprocess telemetry windows','Backend required'],['FR10','Periodic model retraining mechanism','Model workflow'],['FR11','Custom alert confidence thresholds','Settings'],['FR12','Agent and dashboard preferences','Settings'],['FR13','CSV and JSON data export','Telemetry history'],['FR14','Manual override and approval','Remediation']];
-function projectPage(){return heading('University of Petra · Faculty of Information Technology','Built for the moments before a crash.','Graduation Project · Semester 2/2026')+`<section class="panel content-pad"><div class="eyebrow">Intelligent Game Server Optimization Engine</div><div class="about-title">Less firefighting.<br>More time for the game.</div><p class="about-p" style="margin-top:20px">A predictive monitoring system for modded Minecraft Java servers. A lightweight Java edge agent collects hardware and game-state telemetry. A Python backend prepares time-series windows for an LSTM model, enabling early warnings and administrator-controlled responses.</p><div class="form-grid" style="margin:30px 0"><div><h3>Project team</h3><p style="font-size:12px">Abdulrahman Ashraf · 202210005<br>Ayham Magdi Walid Al-Aju · 202220697</p></div><div><h3>Supervision</h3><p style="font-size:12px">Dr. Eman Al Duweib<br>University of Petra</p></div></div><h2>Requirements coverage</h2><p style="font-size:11px">This website implements the GUI and demonstration workflow. Java agent deployment, secure multi-user authentication, durable backend storage, and trained inference remain backend responsibilities.</p>${requirements.map(r=>`<div class="requirement"><span>${r[0]}</span><span>${r[1]}</span><span>${r[2]}</span></div>`).join('')}<div class="note amber" style="margin-top:23px">The document gives both 3% and approximately 5% CPU-overhead targets. Use 3% as the stricter engineering goal and report measured results. The dashboard does not claim that uptime, overhead, prediction accuracy, or latency targets have been achieved.</div></section>`}
-function render(){page=location.hash.slice(1)||'overview';if(!nav.some(n=>n[0]===page))page='overview';$('#nav').innerHTML=nav.map(([id,icon,label])=>`<a href="#${id}" class="${page===id?'active':''}" ${page===id?'aria-current="page"':''}><span class="nav-icon">${icon}</span>${label}${id==='predictions'?`<span class="count">${alerts.filter(a=>a.status==='open').length}</span>`:''}</a>`).join('');$('#crumb').textContent=nav.find(n=>n[0]===page)[2];$('#mode-label').textContent=settings.source==='demo'?'DEMONSTRATION':liveError?'API DISCONNECTED':'LIVE BACKEND';$('#pipeline-label').textContent=settings.source==='demo'?'Demo pipeline active':liveError?'Backend unavailable':'Backend connected';$('#main').innerHTML=(liveError?`<div class="note amber">Backend unavailable: ${esc(liveError)}. Showing the last received data. Automatic actions are disabled.</div>`:'')+({overview,servers:serversPage,predictions:predictionsPage,remediation:remediationPage,history:historyPage,model:modelPage,settings:settingsPage,project:projectPage}[page]());document.body.classList.remove('menu-open');bind();}
-function modal(content){$('#dialog-content').innerHTML=content;$('#dialog').showModal();$('#dialog').querySelector('[data-close]')?.addEventListener('click',()=>$('#dialog').close())}
-function closeButton(){return '<button class="button" data-close>Close</button>'}
-function reviewAlert(id){const a=alerts.find(x=>x.id===id);if(!a)return;modal(`<div class="eyebrow">Predictive alert · ${esc(a.id)}</div><h2>${esc(a.title)}</h2><p>${esc(a.cause)}</p><div class="stats-list"><div class="stat-box">Confidence<b>${a.confidence}%</b></div><div class="stat-box">Horizon<b>${a.horizon} min</b></div><div class="stat-box">Status<b style="font-size:15px">${esc(a.status)}</b></div></div><p style="margin-top:18px">Suggested response: inspect heap trends and loaded chunks, then review a proposed remediation. A confidence score is not a guarantee of failure.</p><div class="dialog-actions">${closeButton()}<button class="button" id="ack-alert">Acknowledge</button><button class="button primary" id="resolve-alert">Mark resolved</button></div>`);$('#ack-alert').onclick=()=>updateAlert(a,'acknowledged');$('#resolve-alert').onclick=()=>updateAlert(a,'resolved')}
-async function updateAlert(a,status){if(!canWrite())return toast('Mod developer access is read-only.');try{if(settings.source==='live')await api(`/alerts/${encodeURIComponent(a.id)}`,{method:'PATCH',body:JSON.stringify({status})});a.status=status;if(settings.source==='demo')log('Alert '+status,a.server,'Saved');$('#dialog').close();persist();render();toast('Alert '+status)}catch(e){toast(e.message)}}
-function canWrite(){return settings.source==='live'||settings.role!=='Mod developer'}
-function bind(){const on=(s,event,fn)=>{const e=$(s);if(e)e.addEventListener(event,fn)};on('#server-select','change',e=>{selected=e.target.value;render()});on('#pause','click',()=>{paused=!paused;render()});on('#search','input',e=>{search=e.target.value;const pos=e.target.selectionStart;render();$('#search').focus();$('#search').setSelectionRange(pos,pos)});on('#status-filter','change',e=>{statusFilter=e.target.value;render()});on('#alert-filter','change',e=>{$('#alerts-panel').innerHTML=alertList(alerts.filter(a=>e.target.value==='all'||a.status===e.target.value));bindAlertButtons()});on('#scenario','click',stressScenario);on('#connect-agent','click',agentGuide);on('#manual-action','click',actionReview);on('#retrain','click',()=>{modal('<h2>Prepare a retraining request</h2><p>Export new labeled telemetry, validate its quality, split by time, and train a new model version in Python. Compare precision, recall, and latency before promoting it.</p><p>This demonstration records a request; no training job will run.</p><div class="dialog-actions">'+closeButton()+'<button class="button primary" id="confirm-training">Record demo request</button></div>');$('#confirm-training').onclick=()=>{if(!canWrite())return toast('Mod developer access is read-only.');log('Retraining requested','all','Queued (demo)');$('#dialog').close();toast('Demonstration retraining request recorded.')}});on('#settings-form','submit',saveSettings);on('#test-api','click',testConnection);on('#api-contract','click',apiContract);on('#reset-demo','click',()=>{modal('<h2>Reset demonstration?</h2><p>This clears saved demo alerts, settings, and audit entries in this browser.</p><div class="dialog-actions">'+closeButton()+'<button class="button danger" id="confirm-reset">Reset demonstration</button></div>');$('#confirm-reset').onclick=()=>{localStorage.removeItem('sentinel-v1');location.reload()}});document.querySelectorAll('[data-range]').forEach(b=>b.onclick=()=>{range=b.dataset.range;render()});document.querySelectorAll('[data-metric]').forEach(b=>b.onclick=()=>{metric=b.dataset.metric;render()});document.querySelectorAll('[data-server]').forEach(b=>b.onclick=()=>{selected=b.dataset.server;location.hash='overview';render()});document.querySelectorAll('[data-export]').forEach(b=>b.onclick=()=>exportData(b.dataset.export));document.querySelectorAll('[data-toggle]').forEach(b=>b.onclick=async e=>{e.preventDefault();if(!canWrite())return toast('Mod developer access is read-only.');const name=b.dataset.toggle,next=!settings[name];try{if(settings.source==='live')await api('/settings',{method:'PATCH',body:JSON.stringify({[name]:next})});settings[name]=next;if(settings.source==='live'){await refreshLive()}else log((name==='override'?'Manual override':name==='auto'?'Automatic remediation':'Notifications')+(next?' enabled':' disabled'),'all','Saved');render();toast('Preference saved')}catch(err){toast(err.message)}});document.querySelectorAll('[data-rollback]').forEach(b=>b.onclick=()=>rollback(b.dataset.rollback));bindAlertButtons();}
-function bindAlertButtons(){document.querySelectorAll('[data-alert]').forEach(b=>b.onclick=()=>reviewAlert(b.dataset.alert))}
-function stressScenario(){if(!canWrite())return toast('Mod developer access is read-only.');const s=servers.find(x=>x.id==='modded-02');if(!s)return;s.cpu=91;s.memory=94;s.tps=14.6;s.risk=96;s.status='warning';const a={id:crypto.randomUUID(),server:s.id,title:'Stress scenario: entity accumulation',cause:'Simulated entity growth increased CPU and heap pressure, reducing tick rate. This is a demonstration, not an LSTM prediction.',confidence:96,horizon:6,severity:'critical',status:'open',time:new Date().toISOString()};if(a.confidence>=settings.threshold)alerts.unshift(a);log('Stress scenario started',s.id,'Simulated');if(settings.auto&&!settings.override&&a.confidence>=settings.threshold){log('Pause nonessential sampling',s.id,'Executed (demo)',true);log('Non-reversible actions blocked',s.id,'Rejected')}persist();render();if(settings.notifications)toast('Scenario ready: 96% confidence alert generated.')}
-function actionReview(){if(!canWrite())return toast('Mod developer access is read-only.');modal(`<div class="eyebrow">Manual action review</div><h2>Pause nonessential sampling</h2><p>This reversible demonstration action pauses optional diagnostics. Core telemetry continues. Choose a server and explicitly approve or reject the proposal.</p><label for="action-server">Target server</label><select id="action-server" style="width:100%;margin-top:10px">${servers.map(s=>`<option value="${esc(s.id)}">${esc(s.name)}</option>`).join('')}</select><div class="note" style="margin-top:18px">${settings.override?'Manual override blocks automatic execution. This is an explicitly reviewed manual request.':'Automatic policy remains subject to backend checks.'}</div><div class="dialog-actions">${closeButton()}<button class="button danger" id="reject-action">Reject</button><button class="button primary" id="approve-action">Approve action</button></div>`);$('#reject-action').onclick=()=>{log('Pause nonessential sampling',$('#action-server').value,'Rejected');$('#dialog').close();render();toast('Proposed action rejected')};$('#approve-action').onclick=async()=>{const server=$('#action-server').value;try{if(settings.source==='live'){await api('/actions',{method:'POST',body:JSON.stringify({serverId:server,action:'pause_optional_sampling',manualApproval:true})});await refreshLive();}else log('Pause nonessential sampling',server,'Executed (demo)',true);$('#dialog').close();render();toast(settings.source==='demo'?'Demo action approved. Rollback is available.':'Action request sent to the backend.')}catch(e){toast(e.message)}}}
-async function rollback(id){if(!canWrite())return toast('Mod developer access is read-only.');try{const a=audit.find(x=>x.id===id);if(!a||!a.reversible||a.rolledBack)return;if(settings.source==='live'){await api(`/actions/${encodeURIComponent(id)}/rollback`,{method:'POST'});await refreshLive()}else{a.rolledBack=true;log('Rollback: '+a.action,a.server,'Rolled back')}render();toast('Rollback recorded')}catch(e){toast(e.message)}}
-function download(name,content,type){const url=URL.createObjectURL(new Blob([content],{type})),a=document.createElement('a');a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000)}
-function exportData(format){const rows=selectedSeries();if(format==='csv'){const keys=['timestamp','serverId','cpu','memory','tps','entities'];const cell=v=>'"'+String(v??'').replace(/^[=+@\-]/,"'$&").replaceAll('"','""')+'"';download('sentinel-telemetry.csv',[keys.join(','),...rows.map(r=>keys.map(k=>cell(r[k])).join(','))].join('\r\n'),'text/csv;charset=utf-8')}else download(format==='audit'?'sentinel-audit.json':'sentinel-report.json',JSON.stringify(format==='audit'?audit:{source:settings.source,exportedAt:new Date().toISOString(),server:current(),telemetry:rows,alerts:alerts.filter(a=>a.server===selected)},null,2),'application/json');toast('Export downloaded')}
-function agentGuide(){modal(`<div class="eyebrow">Connect your infrastructure</div><h2>A small agent. A complete picture.</h2><p>1. Install your Java telemetry agent as a server plugin or supported JVM agent. No compiled agent is included in this GUI package.</p><p>2. Configure your Python backend endpoint and an agent-specific API credential. Keep collection asynchronous and sample every 1–5 seconds.</p><p>3. Send CPU, memory, TPS and loaded entities. Add server identity and a UTC timestamp to every sample.</p><p>4. In Settings, choose Python backend API, enter its HTTPS address and your dashboard token, then test the connection.</p><div class="code">Java agent → authenticated ingestion → Python windows\n→ LSTM inference → /api/dashboard → Sentinel GUI</div><div class="dialog-actions">${closeButton()}<button class="button primary" id="go-settings">Open settings</button></div>`);$('#go-settings').onclick=()=>{$('#dialog').close();location.hash='settings'}}
-function apiContract(){modal('<h2>Backend API contract</h2><p>The dashboard uses Bearer authentication. The API must authenticate users, assign roles, scope server access, and enforce action permissions.</p><div class="code">GET   /api/dashboard\nGET   /api/health\nPATCH /api/alerts/:id  { status }\nPATCH /api/settings   { override, auto, ... }\nPOST  /api/actions    { serverId, action, manualApproval }\nPOST  /api/actions/:id/rollback\n\nDashboard response:\n{ servers: [], telemetry: [], alerts: [], audit: [],\n  model: { name, version, precision, recall, latencyMs } }</div><p style="margin-top:15px">See API-CONTRACT.md in the downloaded project for full field definitions and integration requirements.</p><div class="dialog-actions">'+closeButton()+'</div>')}
-async function api(path,options={},base=settings.api,key=token){const response=await fetch(base.replace(/\/$/,'')+'/api'+path,{...options,headers:{'Authorization':'Bearer '+key,'Content-Type':'application/json',...options.headers},signal:AbortSignal.timeout(10000)});if(!response.ok)throw new Error('API returned '+response.status);if(response.status===204)return null;return response.json()}
-async function testConnection(){const base=$('#api').value,key=$('#token').value||token;try{if(!base.startsWith('https://'))throw new Error('Use an HTTPS backend URL.');if(!key)throw new Error('Enter a dashboard access token.');await api('/health',{},base,key);toast('Backend health check passed.')}catch(e){toast('Connection failed: '+e.message)}}
-async function saveSettings(e){e.preventDefault();const f=new FormData(e.target),next={...settings,threshold:+f.get('threshold'),interval:+f.get('interval'),retention:+f.get('retention'),role:f.get('role'),source:f.get('source'),api:f.get('api')};try{if(next.source==='live'){if(!next.api.startsWith('https://'))throw new Error('Live mode requires an HTTPS URL.');token=f.get('token')||token;if(!token)throw new Error('Enter a Bearer token.');const data=await api('/dashboard',{},next.api,token);validateData(data);liveData=data;servers=data.servers;alerts=data.alerts;audit=data.audit;series=data.telemetry;selected=servers[0]?.id||'';liveError=''}else if(settings.source==='live'){servers=structuredClone(demoServers);alerts=[];audit=[];series=structuredClone(initialSeries);selected=servers[0].id;token='';liveData=null;liveError=''}if(next.source==='live')await api('/settings',{method:'PATCH',body:JSON.stringify({threshold:next.threshold,interval:next.interval,retention:next.retention})},next.api,token);settings=next;persist();render();toast('Configuration saved.')}catch(err){toast(err.message)}}
-function validateData(d){if(!d||!['servers','telemetry','alerts','audit'].every(k=>Array.isArray(d[k])))throw new Error('Dashboard response does not match the API contract.');if(d.servers.some(s=>!s.id||!s.name||!['cpu','memory','tps','entities','players','maxPlayers','risk'].every(k=>Number.isFinite(s[k]))))throw new Error('Invalid server metric fields.');if(d.telemetry.some(r=>!r.serverId||isNaN(Date.parse(r.timestamp))||!['cpu','memory','tps','entities'].every(k=>Number.isFinite(r[k]))))throw new Error('Invalid telemetry samples.');if(d.alerts.some(a=>!a.id||!a.title||!Number.isFinite(a.confidence)||!Number.isFinite(a.horizon)))throw new Error('Invalid alert fields.')}
-async function refreshLive(){if(polling)return;polling=true;try{const d=await api('/dashboard');validateData(d);liveData=d;servers=d.servers;alerts=d.alerts;audit=d.audit;if(!servers.some(s=>s.id===selected))selected=servers[0]?.id||'';lastUpdate=new Date();liveError=''}catch(e){liveError=e.message}finally{polling=false}}
-$('#menu').onclick=()=>document.body.classList.toggle('menu-open');$('#notifications').onclick=()=>{location.hash='predictions'};$('#profile').onclick=()=>{location.hash='settings'};$('#dialog').addEventListener('click',e=>{if(e.target===$('#dialog')){const r=e.target.getBoundingClientRect();if(e.clientX<r.left||e.clientX>r.right||e.clientY<r.top||e.clientY>r.bottom)e.target.close()}});window.addEventListener('hashchange',()=>{render();scrollTo(0,0)});render();
-let elapsed=0;setInterval(async()=>{elapsed++;if(elapsed<settings.interval||paused||$('#dialog').open)return;elapsed=0;if(settings.source==='live')await refreshLive();else{lastUpdate=new Date();const s=current();s.cpu=Math.round(Math.max(5,Math.min(98,s.cpu+(Math.random()-.5)*3)));series.push({timestamp:lastUpdate.toISOString(),serverId:'survival-01',cpu:s.cpu-(selected==='survival-01'?0:s.cpu-48),memory:64,tps:19.8,entities:1248});series=series.slice(-300)}if(['overview','history'].includes(page))render()},1000);
+import { api, openApp, isHosted, escapeHtml as safe, download, HOSTED_APP } from './api.js';
+import { landing, authPage, gameSelection } from './pages.js';
+import { dashboardShell, overview, history, predictions, remediation, agentSetup, settingsPage } from './dashboard.js';
+
+// Only navigation and current UI state live here. Server records come from the API.
+let user = null;
+let dashboard = { servers: [], telemetry: [], audit: [] };
+let serverId = '';
+let activeTab = 'Overview';
+let chartMetric = 'cpu';
+let requestInProgress = false;
+let routeVersion = 0;
+const app = document.querySelector('#app');
+const modal = document.querySelector('#modal');
+const selectedServer = () => dashboard.servers.find(server => server.id === serverId);
+
+function toast(message) {
+  const element = document.querySelector('#toast');
+  element.textContent = message;
+  element.classList.add('show');
+  clearTimeout(toast.timer);
+  toast.timer = setTimeout(() => element.classList.remove('show'), 4000);
+}
+
+function showModal(html) {
+  document.querySelector('#modal-content').innerHTML = html;
+  modal.showModal();
+  modal.querySelector('[data-close]')?.addEventListener('click', () => modal.close());
+}
+
+function animateSections() {
+  if (!('IntersectionObserver' in window)) return;
+  document.body.classList.add('js-motion');
+  const observer = new IntersectionObserver(entries => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting) {
+        entry.target.classList.add('visible');
+        observer.unobserve(entry.target);
+      }
+    });
+  }, { threshold: 0.08 });
+  document.querySelectorAll('.reveal').forEach(element => observer.observe(element));
+}
+
+async function loadDashboard() {
+  const query = serverId ? '?server=' + encodeURIComponent(serverId) : '';
+  dashboard = await api('/dashboard' + query);
+  if (!dashboard.servers.some(server => server.id === serverId)) serverId = dashboard.servers[0]?.id || '';
+}
+
+function drawDashboard() {
+  const server = selectedServer();
+  const renderTab = {
+    'Overview': () => overview(dashboard, server),
+    'Telemetry history': () => history(dashboard, server, chartMetric),
+    'Predictions': () => predictions(dashboard, server),
+    'Remediation': () => remediation(dashboard, server),
+    'Agent setup': () => agentSetup(dashboard, server),
+    'Settings': () => settingsPage(dashboard, server),
+  };
+  app.innerHTML = dashboardShell(user, activeTab, renderTab[activeTab]());
+  bindControls();
+}
+
+async function renderRoute() {
+  const route = location.hash.slice(1) || 'home';
+  const version = ++routeVersion;
+  if (route === 'content') {
+    const content = document.getElementById('content');
+    if (content) { content.tabIndex = -1; content.focus(); content.scrollIntoView(); }
+    return;
+  }
+  // Section links scroll within the public presentation instead of rebuilding it.
+  if (['capabilities', 'how-it-works', 'project', 'games'].includes(route) && route !== 'games') {
+    if (!document.querySelector('.hero')) app.innerHTML = landing(user);
+    bindControls();
+    animateSections();
+    document.getElementById(route)?.scrollIntoView();
+    return;
+  }
+  if (['login', 'signup', 'games', 'minecraft'].includes(route) && !isHosted) {
+    openApp(route);
+    return;
+  }
+  if (['games', 'minecraft'].includes(route) && !user) {
+    location.hash = 'login';
+    return;
+  }
+  if (route === 'login' || route === 'signup') {
+    if (user) { location.hash = 'games'; return; }
+    app.innerHTML = authPage(route === 'signup');
+  } else if (route === 'games') {
+    app.innerHTML = gameSelection(user);
+  } else if (route === 'minecraft') {
+    app.innerHTML = '<main class="loading" id="content"><div><div class="spinner"></div>Loading your Minecraft workspace…</div></main>';
+    try {
+      await loadDashboard();
+      if (version !== routeVersion) return;
+      drawDashboard();
+    } catch (error) { showWorkspaceError(error); }
+    return;
+  } else {
+    app.innerHTML = landing(user);
+    animateSections();
+  }
+  bindControls();
+  window.scrollTo(0, 0);
+}
+
+function showWorkspaceError(error) {
+  if (error.status === 401) {
+    user = null;
+    dashboard = { servers: [], telemetry: [], audit: [] };
+    location.hash = 'login';
+    toast('Your session expired. Please log in again.');
+  } else {
+    app.innerHTML = dashboardShell(user, activeTab, `<section class="empty-state"><h2>We cannot reach the backend.</h2><p>${safe(error.message)}. Live server details are hidden until the connection recovers.</p><button class="button primary" id="retry">Try again</button></section>`);
+    bindControls();
+  }
+}
+
+async function submitAuth(event) {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const button = form.querySelector('button[type="submit"]');
+  const errorBox = document.querySelector('#form-error');
+  button.disabled = true;
+  errorBox.textContent = '';
+  try {
+    const fields = Object.fromEntries(new FormData(form));
+    const result = await api('/auth/' + form.dataset.mode, { method: 'POST', body: JSON.stringify(fields) });
+    user = result.user;
+    form.reset();
+    location.hash = 'games';
+  } catch (error) {
+    errorBox.textContent = error.message;
+    button.disabled = false;
+  }
+}
+
+function connectServer() {
+  showModal('<div class="eyebrow">MINECRAFT JAVA / PAPER</div><h2>Connect a real server.</h2><p>Give the connection a name. You will receive a private key and configuration for the Paper agent. Metrics stay hidden until the agent sends telemetry.</p><form id="new-server-form"><label for="connection-name">Server name</label><input id="connection-name" name="name" maxlength="60" minlength="2" required placeholder="e.g. Our survival world"><div class="form-error" id="connection-error" role="alert"></div><div class="actions"><button type="button" class="button" data-close>Cancel</button><button class="button primary" type="submit">Create connection</button></div></form>');
+  document.querySelector('#new-server-form').onsubmit = async event => {
+    event.preventDefault();
+    const button = event.currentTarget.querySelector('[type="submit"]');
+    button.disabled = true;
+    try {
+      const result = await api('/servers', { method: 'POST', body: JSON.stringify({ name: document.querySelector('#connection-name').value }) });
+      serverId = result.server.id;
+      const config = `endpoint: ${HOSTED_APP}/api/telemetry\nserver-id: ${serverId}\nagent-key: ${result.agentKey}\ninterval-seconds: 5\n`;
+      showModal(`<div class="eyebrow">CONNECTION CREATED</div><h2>Save your agent configuration.</h2><p>This private key is shown once. Put the file only in your Minecraft server’s plugin folder. It permits telemetry ingestion for this server, not account access.</p><pre class="code">${safe(config)}</pre><div class="actions"><button class="button" data-close>Close</button><button class="button primary" id="download-config">↓ Download config.yml</button></div>`);
+      document.querySelector('#download-config').onclick = () => download('config.yml', config, 'text/yaml');
+      await loadDashboard();
+      activeTab = 'Agent setup';
+      drawDashboard();
+    } catch (error) {
+      const errorBox = document.querySelector('#connection-error');
+      if (errorBox) errorBox.textContent = error.message;
+      button.disabled = false;
+    }
+  };
+}
+
+function exportTelemetry(format) {
+  if (!dashboard.telemetry.length) return toast('No recorded telemetry is available to export.');
+  if (format === 'json') return download('minecraft-telemetry.json', JSON.stringify(dashboard.telemetry, null, 2));
+  const columns = ['timestamp', 'cpu', 'memory', 'tps', 'entities', 'players'];
+  const cell = value => '"' + String(value ?? '').replaceAll('"', '""') + '"';
+  const csv = [columns.join(','), ...dashboard.telemetry.map(row => columns.map(key => cell(row[key])).join(','))].join('\r\n');
+  download('minecraft-telemetry.csv', csv, 'text/csv;charset=utf-8');
+}
+
+function bindControls() {
+  document.querySelectorAll('[data-open]').forEach(button => button.onclick = event => { event.preventDefault(); openApp(button.dataset.open); });
+  document.querySelector('[data-game="minecraft"]')?.addEventListener('click', () => { activeTab = 'Overview'; location.hash = 'minecraft'; });
+  document.querySelector('#auth-form')?.addEventListener('submit', submitAuth);
+  document.querySelector('#show-password')?.addEventListener('click', event => {
+    const input = document.querySelector('#password');
+    input.type = input.type === 'password' ? 'text' : 'password';
+    event.currentTarget.textContent = input.type === 'password' ? 'Show' : 'Hide';
+  });
+  document.querySelector('#logout')?.addEventListener('click', async () => {
+    try {
+      await api('/auth/logout', { method: 'POST' });
+      user = null;
+      dashboard = { servers: [], telemetry: [], audit: [] };
+      serverId = '';
+      location.hash = 'home';
+    } catch (error) { toast(error.message); }
+  });
+  document.querySelectorAll('[data-tab]').forEach(button => button.onclick = () => { activeTab = button.dataset.tab; drawDashboard(); });
+  document.querySelector('#server-select')?.addEventListener('change', async event => {
+    serverId = event.target.value;
+    try { await loadDashboard(); drawDashboard(); } catch (error) { showWorkspaceError(error); }
+  });
+  document.querySelector('#connect-server')?.addEventListener('click', connectServer);
+  document.querySelector('#first-server')?.addEventListener('click', connectServer);
+  document.querySelector('#retry')?.addEventListener('click', renderRoute);
+  document.querySelectorAll('[data-metric]').forEach(button => button.onclick = () => { chartMetric = button.dataset.metric; drawDashboard(); });
+  document.querySelectorAll('[data-export]').forEach(button => button.onclick = () => exportTelemetry(button.dataset.export));
+  document.querySelector('#override')?.addEventListener('click', async () => {
+    try {
+      await api('/servers/' + serverId, { method: 'PATCH', body: JSON.stringify({ manualOverride: !selectedServer().manualOverride }) });
+      await loadDashboard(); drawDashboard(); toast('Manual override policy saved.');
+    } catch (error) { toast(error.message); }
+  });
+  document.querySelector('#policy-form')?.addEventListener('submit', async event => {
+    event.preventDefault();
+    const fields = new FormData(event.currentTarget);
+    try {
+      await api('/servers/' + serverId, { method: 'PATCH', body: JSON.stringify({ name: fields.get('name'), threshold: Number(fields.get('threshold')) }) });
+      await loadDashboard(); drawDashboard(); toast('Server policy saved.');
+    } catch (error) { toast(error.message); }
+  });
+}
+
+// Refresh only the live workspace. Do not erase forms or let an API failure leave stale live readings.
+setInterval(async () => {
+  if (location.hash !== '#minecraft' || !user || requestInProgress || modal.open || activeTab === 'Settings') return;
+  if (['INPUT', 'SELECT', 'TEXTAREA'].includes(document.activeElement?.tagName)) return;
+  requestInProgress = true;
+  try { await loadDashboard(); if (location.hash === '#minecraft') drawDashboard(); }
+  catch (error) { if (location.hash === '#minecraft') showWorkspaceError(error); }
+  finally { requestInProgress = false; }
+}, 5000);
+
+window.addEventListener('hashchange', renderRoute);
+async function start() {
+  if (isHosted) {
+    try { user = (await api('/auth/me')).user; }
+    catch { user = null; }
+  }
+  renderRoute();
+}
+start();

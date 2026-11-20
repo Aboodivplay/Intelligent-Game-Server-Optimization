@@ -1,5 +1,5 @@
-import { config } from './config.js?v=overworld-20261025-1';
-import { authenticate, currentUser, logout, sessionToken } from './session.js?v=overworld-20261025-1';
+import { config } from './config.js?v=accounts-20261120';
+import { authenticate, currentUser, logout, sessionToken } from './session.js?v=accounts-20261120';
 
 const isLocal = ['localhost', '127.0.0.1'].includes(location.hostname);
 export const agentEndpoint = () => config.supabaseUrl ? config.supabaseUrl + '/functions/v1/' + config.functionName + '/telemetry' : '';
@@ -19,22 +19,28 @@ export async function api(path, options = {}) {
     throw error;
   }
   const endpoint = isLocal ? '/api' : config.supabaseUrl + '/functions/v1/' + config.functionName;
-  const response = await fetch(endpoint + path, {
-    ...options,
-    credentials: isLocal ? 'same-origin' : 'omit',
-    cache: 'no-store',
-    referrerPolicy: 'no-referrer',
-    headers: {
-      'Content-Type': 'application/json',
-      ...(!isLocal ? { Authorization: 'Bearer ' + token, apikey: config.publishableKey } : {}),
-      ...options.headers,
-    },
-    signal: AbortSignal.timeout(15000),
-  });
+  let response;
+  try {
+    response = await fetch(endpoint + path, {
+      ...options,
+      credentials: isLocal ? 'same-origin' : 'omit',
+      cache: 'no-store',
+      referrerPolicy: 'no-referrer',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(!isLocal ? { Authorization: 'Bearer ' + token, apikey: config.publishableKey } : {}),
+        ...options.headers,
+      },
+      signal: AbortSignal.timeout(15000),
+    });
+  } catch {
+    throw new Error('The workspace service is unreachable. Check your connection and try again.');
+  }
   const data = await response.json().catch(() => ({}));
   if (!response.ok) {
     const error = new Error(data.error || 'Unable to complete this request. Please try again.');
     error.status = response.status;
+    error.code = data.code;
     throw error;
   }
   return data;

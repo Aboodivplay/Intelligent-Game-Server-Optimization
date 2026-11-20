@@ -1,5 +1,5 @@
-import { escapeHtml as safe, agentEndpoint } from './api.js?v=overworld-20261025-1';
-import { brand } from './pages.js?v=overworld-20261025-1';
+import { escapeHtml as safe, agentEndpoint } from './api.js?v=accounts-20261120';
+import { brand } from './pages.js?v=accounts-20261120';
 
 export const dashboardTabs = ['Overview', 'Live players', 'Console', 'Telemetry history', 'Predictions', 'Remediation', 'Agent setup', 'Settings'];
 

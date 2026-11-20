@@ -1,10 +1,13 @@
-import { api, openApp, escapeHtml as safe, download, agentEndpoint } from './api.js?v=overworld-20261025-1';
-import { readEmailAction, sendPasswordReset, changePassword, resendConfirmation } from './session.js?v=overworld-20261025-1';
-import { landing, authPage, gameSelection } from './pages.js?v=overworld-20261025-1';
-import { dashboardShell, overview, history, predictions, remediation, agentSetup, settingsPage, livePlayers, consolePage } from './dashboard.js?v=overworld-20261025-1';
+import { showAccountSecurity } from './account-security.js?v=accounts-20261120';
+import { api, openApp, escapeHtml as safe, download, agentEndpoint } from './api.js?v=accounts-20261120';
+import { readEmailAction, sendPasswordReset, changePassword, resendConfirmation, verifyAuthenticator, clearSession } from './session.js?v=accounts-20261120';
+import { landing, authPage, gameSelection, verificationPage, passwordChangePage } from './pages.js?v=accounts-20261120';
+import { dashboardShell, overview, history, predictions, remediation, agentSetup, settingsPage, livePlayers, consolePage } from './dashboard.js?v=accounts-20261120';
 
 // Only navigation and current UI state live here. Server records come from the API.
 let user = null;
+let pendingLogin = null;
+let recoveringPassword = false;
 let dashboard = { servers: [], telemetry: [], audit: [] };
 let serverId = '';
 let activeTab = 'Overview';
@@ -48,7 +51,11 @@ function animateSections() {
 
 async function loadDashboard() {
   const query = serverId ? '?server=' + encodeURIComponent(serverId) : '';
-  dashboard = await api('/dashboard' + query);
+  const owner = user;
+  const requestedServer = serverId;
+  const data = await api('/dashboard' + query);
+  if (owner !== user || requestedServer !== serverId) return;
+  dashboard = data;
   if (!dashboard.servers.some(server => server.id === serverId)) serverId = dashboard.servers[0]?.id || '';
 }
 
@@ -72,6 +79,18 @@ async function renderRoute() {
   const route = location.hash.slice(1) || 'home';
   document.body.classList.toggle('minecraft-theme', route === 'minecraft');
   const version = ++routeVersion;
+  if (pendingLogin && route !== 'verify-login') {
+    location.hash = 'verify-login';
+    return;
+  }
+  if (route === 'verify-login') {
+    if (!pendingLogin) { location.hash = 'login'; return; }
+    app.innerHTML = verificationPage(pendingLogin.account.authenticators);
+    document.querySelector('#verify-login').onsubmit = submitLoginCode;
+    document.querySelector('#cancel-login').onclick = cancelLogin;
+    return;
+  }
+  if (recoveringPassword && route !== 'reset-password') { location.hash = 'reset-password'; return; }
   if (route === 'content') {
     const content = document.getElementById('content');
     if (content) { content.tabIndex = -1; content.focus(); content.scrollIntoView(); }
@@ -90,11 +109,9 @@ async function renderRoute() {
     return;
   }
   if (route === 'reset-password') {
-    app.innerHTML = authPage(false);
-    document.querySelector('.auth-form h2').textContent = 'Choose a new password.';
-    document.querySelector('.auth-form > p').textContent = 'Use a unique passphrase with at least 12 characters.';
-    document.querySelector('#email').closest('form').innerHTML = '<label for="new-password">New password</label><input id="new-password" type="password" minlength="12" maxlength="128" autocomplete="new-password" required><label for="confirm-new-password">Confirm new password</label><input id="confirm-new-password" type="password" minlength="12" maxlength="128" autocomplete="new-password" required><div id="form-error" class="form-error" role="alert"></div><button class="button primary full" type="submit">Save new password</button>';
-    document.querySelector('#auth-form').onsubmit = submitNewPassword;
+    if (!recoveringPassword || !user) { location.hash = 'login'; return; }
+    app.innerHTML = passwordChangePage();
+    document.querySelector('#new-password-form').onsubmit = submitNewPassword;
     window.scrollTo(0, 0);
     return;
   }
@@ -110,7 +127,7 @@ async function renderRoute() {
       await loadDashboard();
       if (version !== routeVersion) return;
       drawDashboard();
-    } catch (error) { showWorkspaceError(error); }
+    } catch (error) { if (version === routeVersion) showWorkspaceError(error); }
     return;
   } else {
     app.innerHTML = landing(user);
@@ -121,11 +138,13 @@ async function renderRoute() {
 }
 
 function showWorkspaceError(error) {
-  if (error.status === 401) {
+  if (error.status === 401 || error.code === 'mfa_required') {
+    clearSession();
+    serverId = '';
     user = null;
     dashboard = { servers: [], telemetry: [], audit: [] };
     location.hash = 'login';
-    toast('Your session expired. Please log in again.');
+    toast(error.code === 'mfa_required' ? 'Sign in again to verify your authenticator.' : 'Your session expired. Please log in again.');
   } else {
     app.innerHTML = dashboardShell(user, activeTab, `<section class="empty-state"><h2>We cannot reach the backend.</h2><p>${safe(error.message)}. Live server details are hidden until the connection recovers.</p><button class="button primary" id="retry">Try again</button></section>`);
     bindControls();
@@ -153,19 +172,58 @@ async function submitAuth(event) {
   button.disabled = true;
   button.textContent = 'Please wait…';
   try {
-    const fields = Object.fromEntries(new FormData(form));
+    const fields = { email: form.elements.email.value, password: form.elements.password.value };
+    if (form.elements.name) fields.name = form.elements.name.value;
     const result = await api('/auth/' + form.dataset.mode, { method: 'POST', body: JSON.stringify(fields) });
     form.reset();
     if (result.confirmationRequired) {
       document.querySelector('.auth-form').innerHTML = '<div class="eyebrow">CHECK YOUR EMAIL</div><h2>Confirm your address.</h2><p class="auth-status">If this address can be registered, a confirmation link will arrive in your inbox. Open it to finish setting up your account.</p><a class="button primary full" href="#login">Back to login</a>';
       return;
     }
-    user = result.user;
-    location.hash = 'games';
+    finishLogin(result.user);
   } catch (error) {
     errorBox.textContent = error.message;
     button.disabled = false;
-    button.textContent = form.dataset.mode === 'signup' ? 'Create account ↗' : 'Log in ↗';
+    button.textContent = form.dataset.mode === 'signup' ? 'Create account' : 'Log in';
+  }
+}
+
+// A password or recovery link is only the first step for enrolled accounts.
+function finishLogin(account, recovery = false) {
+  if (account.authenticators?.length) {
+    pendingLogin = { account, recovery };
+    location.hash = 'verify-login';
+    return;
+  }
+  user = account;
+  recoveringPassword = recovery;
+  location.hash = recovery ? 'reset-password' : 'games';
+}
+
+async function cancelLogin() {
+  pendingLogin = null;
+  const revocation = api('/auth/logout', { method: 'POST' });
+  location.hash = 'login';
+  try { await revocation; } catch { toast('Signed out on this page.'); }
+}
+
+async function submitLoginCode(event) {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const pending = pendingLogin;
+  const button = form.querySelector('[type=submit]');
+  button.disabled = true;
+  try {
+    const account = await verifyAuthenticator(form.elements.factor.value, form.elements.code.value);
+    if (pending !== pendingLogin) return;
+    user = account;
+    pendingLogin = null;
+    recoveringPassword = pending.recovery;
+    location.hash = recoveringPassword ? 'reset-password' : 'games';
+  } catch (error) {
+    form.querySelector('[data-code-error]').textContent = error.message;
+    form.elements.code.select();
+    button.disabled = false;
   }
 }
 
@@ -180,6 +238,7 @@ async function submitNewPassword(event) {
   button.disabled = true;
   try {
     await changePassword(password);
+    recoveringPassword = false;
     user = null;
     location.hash = 'login';
     toast('Password updated. Please log in again.');
@@ -236,13 +295,17 @@ function bindControls() {
   document.querySelectorAll('[data-open]').forEach(button => button.onclick = event => { event.preventDefault(); openApp(button.dataset.open); });
   document.querySelector('[data-game="minecraft"]')?.addEventListener('click', () => { activeTab = 'Overview'; location.hash = 'minecraft'; });
   document.querySelector('#auth-form')?.addEventListener('submit', submitAuth);
-  document.querySelector('#resend-confirmation')?.addEventListener('click',async event=>{
-    const email=document.querySelector('#email');
-    if(!email.checkValidity()){email.reportValidity();return;}
-    event.currentTarget.disabled=true;
-    try{await resendConfirmation(email.value);toast('If confirmation is needed, a new link will arrive. Open the latest email.');}
-    catch(error){toast(error.message);}
-    finally{event.currentTarget.disabled=false;}
+  document.querySelector('#account-security')?.addEventListener('click', () => {
+    showAccountSecurity(user, { showModal, toast, onUpdate: account => { user = account; } });
+  });
+  document.querySelector('#resend-confirmation')?.addEventListener('click', async event => {
+    const email = document.querySelector('#email');
+    if (!email.reportValidity()) return;
+    const button = event.currentTarget;
+    button.disabled = true;
+    try { await resendConfirmation(email.value); toast('If confirmation is needed, a new link will arrive. Open the latest email.'); }
+    catch (error) { toast(error.message); }
+    finally { button.disabled = false; }
   });
   document.querySelector('#forgot-password')?.addEventListener('click', passwordResetDialog);
   document.querySelector('#password')?.addEventListener('input', event => {
@@ -360,14 +423,12 @@ modal.addEventListener('close', () => document.querySelector('#modal-content').r
 async function start() {
   const emailAction = await readEmailAction();
   if (emailAction?.user) {
-    user = emailAction.user;
-    location.hash = emailAction.recovery ? 'reset-password' : 'games';
+    finishLogin(emailAction.user, emailAction.recovery);
   } else {
     try { user = (await api('/auth/me')).user; }
     catch { user = null; }
   }
   await renderRoute();
   if (emailAction?.linkError) toast('This email link expired or is invalid. Request a new confirmation or password reset.');
-  if (emailAction?.confirmed) toast('Email link opened. Please log in; this browser has no matching signup session.');
 }
 start();

@@ -1,4 +1,4 @@
-import { escapeHtml as safe } from './api.js?v=overworld-20261025-1';
+import { escapeHtml as safe } from './api.js?v=accounts-20261120';
 
 export function brand() {
   return '<a class="brand" href="#home"><span>INTELLIGENT GAME<span>SERVER OPTIMIZATION</span></span></a>';
@@ -33,9 +33,75 @@ export function gameCards(interactive) {
 }
 
 export function gameSelection(user) {
-  return `${header(user)}<main id="content" class="section-width selection"><div class="eyebrow"><span class="live-dot"></span> YOUR WORKSPACE</div><h1>Choose your <span>world.</span></h1><p>Welcome, ${safe(user.name)}. Pick a game to open its control room.</p>${gameCards(true)}<div class="selection-footer"><span>Minecraft is our first supported integration.</span><button class="text-link" id="logout">Log out ↗</button></div></main>${footer()}`;
+  return `${header(user)}<main id="content" class="section-width selection"><div class="eyebrow"><span class="live-dot"></span> YOUR WORKSPACE</div><h1>Choose your <span>world.</span></h1><p>Welcome, ${safe(user.name)}. Pick a game to open its control room.</p>${gameCards(true)}<div class="selection-footer"><span>Minecraft is our first supported integration.</span><div class="account-links">${user.authenticators ? '<button class="text-link" id="account-security">Account security</button>' : ''}<button class="text-link" id="logout">Log out ↗</button></div></div></main>${footer()}`;
+}
+
+
+function authLayout(title, description, body) {
+  return `<main class="auth-layout" id="content">
+    <section class="auth-story">
+      ${brand()}
+      <div><h1>Minecraft<br><span>server monitoring.</span></h1>
+        <p>Track server performance and investigate slowdowns.</p>
+        <div class="auth-orbit" aria-hidden="true"><div class="grass-block"><i></i><b></b><span></span></div></div>
+      </div>
+      <a class="text-link" href="#home">← Back to the project</a>
+    </section>
+    <section class="auth-form-wrap"><div class="auth-form">
+      <h2>${title}</h2><p>${description}</p>${body}
+    </div></section>
+  </main>`;
 }
 
 export function authPage(signup = false) {
-  return `<main class="auth-layout" id="content"><section class="auth-story">${brand()}<div><div class="eyebrow">YOUR SERVER. YOUR CONTROL ROOM.</div><h1>Your world.<br>Your server.<br><span>Your workspace.</span></h1><p>One place to understand the server<br>behind your community.</p><div class="auth-orbit" aria-hidden="true"><div class="grass-block"><i></i><b></b><span></span></div></div></div><a class="text-link" href="#home">← Back to the project</a></section><section class="auth-form-wrap"><div class="auth-form"><div class="eyebrow">INTELLIGENT GAME SERVER OPTIMIZATION</div><h2>${signup ? 'Create your account.' : 'Welcome back.'}</h2><p>${signup ? 'Set up your private workspace, then connect your Minecraft server.' : 'Sign in to your private server workspace.'}</p><form id="auth-form" method="post" novalidate data-mode="${signup ? 'signup' : 'login'}">${signup ? '<label for="name">Your name</label><input id="name" name="name" autocomplete="name" minlength="2" maxlength="80" required placeholder="Your display name">' : ''}<label for="email">Email address</label><input id="email" name="email" type="email" inputmode="email" spellcheck="false" autocapitalize="none" autocomplete="email" maxlength="254" required placeholder="you@example.com"><div class="label-row"><label for="password">Password</label><button type="button" class="text-link" id="show-password">Show</button></div><input id="password" name="password" type="password" aria-describedby="password-guide" autocomplete="${signup ? 'new-password' : 'current-password'}" minlength="${signup ? '12' : '1'}" maxlength="128" required placeholder="${signup ? 'At least 12 characters' : 'Your password'}">${signup ? '<label for="confirm-password">Confirm password</label><input id="confirm-password" name="confirmPassword" type="password" autocomplete="new-password" minlength="12" maxlength="128" required placeholder="Enter the same password again"><div class="password-guide" id="password-guide">Use at least 12 characters. A unique passphrase is easier to remember.</div>' : '<div class="forgot-row"><button type="button" class="text-link" id="resend-confirmation">Resend confirmation</button><button type="button" class="text-link" id="forgot-password">Forgot password?</button></div>'}<div id="form-error" class="form-error" role="alert"></div><button class="button primary full" type="submit">${signup ? 'Create account' : 'Log in'} <span>↗</span></button></form><p class="auth-switch">${signup ? 'Already have an account?' : 'New to the project?'} <a href="#${signup ? 'login' : 'signup'}">${signup ? 'Log in' : 'Create an account'}</a></p><div class="auth-security"><span>◇</span> Private by account. Server keys stay on your server.</div></div></section></main>`;
+  const nameField = `<label for="name">Display name (optional)</label>
+    <input id="name" name="name" autocomplete="nickname" maxlength="80" placeholder="A nickname is fine">`;
+  const confirmation = `<label for="confirm-password">Confirm password</label>
+    <input id="confirm-password" name="confirmPassword" type="password" autocomplete="new-password" minlength="12" maxlength="128" required>
+    <div class="password-guide" id="password-guide">Use a unique passphrase of at least 12 characters.</div>`;
+  const help = `<div class="forgot-row">
+    <button type="button" class="text-link" id="resend-confirmation">Resend confirmation</button>
+    <button type="button" class="text-link" id="forgot-password">Forgot password?</button>
+  </div>`;
+
+  return authLayout(signup ? 'Create an account' : 'Log in',
+    signup ? 'Create a private workspace for your Minecraft servers.' : 'Sign in to your server workspace.',
+    `<form id="auth-form" method="post" novalidate data-mode="${signup ? 'signup' : 'login'}">
+      ${signup ? nameField : ''}
+      <label for="email">Email address</label>
+      <input id="email" name="email" type="email" autocomplete="username" autocapitalize="none" spellcheck="false" maxlength="254" required>
+      <div class="label-row"><label for="password">Password</label><button type="button" class="text-link" id="show-password">Show</button></div>
+      <input id="password" name="password" type="password" autocomplete="${signup ? 'new-password' : 'current-password'}"
+        ${signup ? 'minlength="12" maxlength="128" aria-describedby="password-guide"' : ''} required>
+      ${signup ? confirmation : help}
+      <div id="form-error" class="form-error" role="alert"></div>
+      <button class="button primary full" type="submit">${signup ? 'Create account' : 'Log in'}</button>
+    </form>
+    <p class="auth-switch">${signup ? 'Already have an account?' : 'New to the project?'}
+      <a href="#${signup ? 'login' : 'signup'}">${signup ? 'Log in' : 'Create an account'}</a></p>`);
+}
+
+export function codeFields() {
+  return `<label for="auth-code">Six-digit code</label>
+    <input id="auth-code" name="code" type="text" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6" required>
+    <div class="form-error" role="alert" data-code-error></div>
+    <button class="button primary full" type="submit">Verify code</button>`;
+}
+
+export function verificationPage(factors) {
+  const options = factors.map(factor => `<option value="${safe(factor.id)}">${safe(factor.name)}</option>`).join('');
+  return authLayout('Verify your login', 'Enter the current code from your authenticator app.',
+    `<form id="verify-login"><label for="factor-id">Authenticator</label>
+       <select id="factor-id" name="factor">${options}</select>${codeFields()}
+     </form><button class="text-link" id="cancel-login">Back to login</button>`);
+}
+
+export function passwordChangePage() {
+  return authLayout('Choose a new password', 'Use a unique passphrase of at least 12 characters.',
+    `<form id="new-password-form">
+      <label for="new-password">New password</label><input id="new-password" type="password" minlength="12" maxlength="128" autocomplete="new-password" required>
+      <label for="confirm-new-password">Confirm new password</label><input id="confirm-new-password" type="password" minlength="12" maxlength="128" autocomplete="new-password" required>
+      <div id="form-error" class="form-error" role="alert"></div>
+      <button class="button primary full" type="submit">Save new password</button>
+    </form>`);
 }

@@ -256,3 +256,8 @@ body.motion-paused .hero-cube-float, body.motion-paused .glitch-question span { 
 
 /* Retire the previous emblem, including older cached page markup. */
 .brand img { display:none !important; }
+
+.account-links { display: flex; flex-wrap: wrap; gap: 1.25rem; align-items: center; }
+#verify-login, #enrollment-form { display: grid; gap: .6rem; margin-bottom: 1rem; }
+.authenticator-qr { display: block; width: min(12rem, 100%); background: white; margin: 1rem auto; }
+.setup-key { overflow-wrap: anywhere; user-select: all; }

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
-import { chromium } from 'playwright';
+import { chromium } from 'playwright-core';
 
-const browser = await chromium.launch();
+const browser = await chromium.launch({ channel: 'chrome' });
 try {
   for (const width of [1440, 390]) {
     const page = await browser.newPage({ viewport: { width, height: 900 }, reducedMotion: 'reduce' });

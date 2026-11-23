@@ -11,21 +11,22 @@ permissions:
 
 jobs:
   workspace:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           persist-credentials: false
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
       - run: node --test tests/session.test.mjs tests/audit.test.mjs
-      - name: Install browser for tests
-        run: |
-          npm install --no-save --package-lock=false playwright@1.55.1
-          npx playwright install --with-deps chromium
+      - name: Use the runner's Chrome browser
+        run: npm install --no-save --package-lock=false playwright-core@1.55.1
       - name: Check desktop and mobile workspaces
         run: |
           python3 -m http.server 4173 --bind 127.0.0.1 >/tmp/igso-web.log 2>&1 &
           node tests/workspace-browser.mjs
+      - name: Check the published sign-in services
+        if: github.event_name == 'push'
+        run: node tests/published-site.mjs

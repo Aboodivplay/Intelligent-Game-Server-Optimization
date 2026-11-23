@@ -1,53 +1,31 @@
 import { escapeHtml as safe, agentEndpoint } from './api.js?v=accounts-20261120';
-import { brand } from './pages.js?v=accounts-20261120';
+import { brand } from './pages.js?v=overworld-20261123';
 
 export const dashboardTabs = ['Overview', 'Live players', 'Console', 'Telemetry history', 'Predictions', 'Remediation', 'Agent setup', 'Settings'];
 
-// Small inline icons keep navigation crisp without an icon dependency.
-const navigationIcons = [
-  '<rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/>',
-  '<circle cx="9" cy="8" r="3"/><path d="M3 21v-3a6 6 0 0 1 12 0v3M16 5a3 3 0 0 1 0 6M18 15a4 4 0 0 1 3 4v2"/>',
-  '<path d="m4 6 6 6-6 6m9 0h7"/>',
-  '<path d="M3 3v18h18M6 15l4-5 4 3 6-8"/>',
-  '<path d="m3 17 5-7 5 4 8-10M16 4h5v5"/>',
-  '<path d="M12 3 3 7v5c0 5 9 9 9 9s9-4 9-9V7zM8 12l3 3 5-6"/>',
-  '<path d="M8 3v5m8-5v5M5 8h14v5a7 7 0 0 1-14 0zM12 20v3"/>',
-  '<path d="M4 6h16M4 12h16M4 18h16"/><rect x="7" y="4" width="3" height="4"/><rect x="15" y="10" width="3" height="4"/><rect x="8" y="16" width="3" height="4"/>',
-];
+// Each workspace tab uses the item a player would see in an inventory slot.
+const navigationItems = ['grass-block', 'name_tag', 'redstone', 'book', 'ender_pearl', 'iron_pickaxe', 'repeater', 'comparator'];
 
-// A lightweight block landscape: no video, canvas loop, or remote images.
-function landscape() {
-  const trees = [[615,110,1],[715,90,.8],[1030,105,1.3],[1140,130,.9]];
-  return `<svg class="voxel-landscape" viewBox="0 0 1280 260" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
-    <defs><linearGradient id="mc-sky" x2="0" y2="1"><stop stop-color="#42697b"/><stop offset="1" stop-color="#a3b7a0"/></linearGradient><linearGradient id="mc-lake" x2="0" y2="1"><stop stop-color="#429ca6"/><stop offset="1" stop-color="#235166"/></linearGradient><pattern id="mc-stone" width="32" height="24" patternUnits="userSpaceOnUse"><path d="M0 0h32v24H0z" fill="#435951"/><path d="M0 1h31M16 1v11M0 13h32M6 13v11" stroke="#52675a" stroke-width="2"/></pattern></defs>
-    <path fill="url(#mc-sky)" d="M0 0h1280v260H0z"/>
-    <path fill="#f3dfaa" d="M1005 25h45v45h-45z"/><path fill="#ebf2d7" opacity=".38" d="M535 42h55V28h80v14h70v18H535zM1070 78h45V65h60v13h105v17h-210z"/>
-    <path fill="#5d8581" d="M350 180v-35h60v-30h70V88h80v35h80v30h80v-40h60V78h70v-30h70v40h60v40h80v-23h100v50h120v105H350z"/>
-    <path fill="#315e58" d="M480 240V150h90v-22h60v30h100v25h100v-52h65v-21h90v28h75v38h110v-28h110v112H480z"/>
-    <path fill="url(#mc-lake)" d="M0 187h1280v73H0z"/>
-    <g class="lake-reflections" fill="#a5e0d2" opacity=".32"><path d="M680 208h85v3h-85zM820 231h100v3H820zM1070 207h100v3h-100zM940 250h70v3h-70zM540 242h90v3h-90zM1150 237h90v3h-90z"/></g>
-    <path fill="url(#mc-stone)" d="M540 166h180v24h65v31H670v-12H540zM980 157h300v103h-65v-25h-80v-29H980z"/>
-    <path fill="#75a253" d="m540 166 40-22h155l-15 22zM720 190l15-24h65l-15 24zM980 157l45-25h255v25z"/>
-    <path fill="#48763e" d="M540 166h180v8H540zM720 190h65v7h-65zM980 157h300v9H980z"/>
-    ${trees.map(([x,y,k])=>`<g transform="translate(${x} ${y}) scale(${k})"><path fill="#66513a" d="M-6 0H7v42H-6z"/><path fill="#284f39" d="M-32-25h64v41h-64z"/><path fill="#4b7b43" d="m-32-25 15-12h64L32-25z"/><path fill="#39683b" d="M32-25 47-37V4L32 16z"/><path fill="#477a40" d="M-23-16h17v12h-17zM5-20h20v9H5zM-9 3H6v10H-9z"/></g>`).join('')}
-    <path fill="#6f9050" d="M1170 212h42v5h-42zM1120 181h30v5h-30z"/>
-  </svg>`;
+function inventorySlot(item) {
+  return `<span class="inventory-slot" aria-hidden="true"><img src="assets/minecraft/${item}.png" alt="" width="24" height="24"></span>`;
 }
 
 export function dashboardShell(user, activeTab, content) {
+  const tabs = dashboardTabs.map((tab, index) => {
+    const current = tab === activeTab ? 'class="active" aria-current="page"' : '';
+    return `<button data-tab="${tab}" ${current}>${inventorySlot(navigationItems[index])}<span>${tab}</span></button>`;
+  }).join('');
+
   return `<header class="workspace-header">${brand()}<div class="actions"><span class="user-label">${safe(user.name)}</span><a class="text-link" href="#games">← Games</a><button class="button small" id="logout">Log out</button></div></header>
     <section class="mc-panorama" aria-label="Minecraft workspace">
-      ${landscape()}
-      <div class="panorama-copy"><span class="edition-label">JAVA EDITION <i></i> PAPER</span><strong>MINECRAFT</strong><p>Your world. Under control.</p></div>
-      <div class="panorama-block"><div class="grass-block"><i></i><b></b><span></span></div></div>
-      <span class="panorama-caption">THE OVERWORLD / SERVER WORKSPACE</span>
+      <div class="overworld-view" aria-hidden="true"></div>
+      <div class="panorama-copy"><span class="edition-label">JAVA EDITION <i></i> PAPER</span><strong>Minecraft</strong><p>Server workspace</p></div>
+      <a class="texture-credit" href="https://github.com/Aboodivplay/Intelligent-Game-Server-Optimization/blob/main/assets/minecraft/CREDITS.md">Texture credits</a>
     </section>
     <div class="workspace"><aside class="workspace-sidebar">
-      <div class="current-game"><span class="game-texture" aria-hidden="true"></span><div><strong>Minecraft</strong><small>SERVER WORKSPACE</small></div></div>
-      <span class="nav-label">CONTROL CENTER</span>
-      <nav aria-label="Minecraft workspace">${dashboardTabs.map((tab,i) => `<button data-tab="${tab}" class="${tab === activeTab ? 'active' : ''}" ${tab === activeTab ? 'aria-current="page"' : ''}><svg viewBox="0 0 24 24" aria-hidden="true">${navigationIcons[i]}</svg><span>${tab}</span></button>`).join('')}</nav>
-      <div class="sidebar-note"><span class="note-square" aria-hidden="true"></span><div>Built for your world<small>Minecraft Java · Paper<br>Private server workspace</small></div></div>
-    </aside><main class="workspace-main" id="content">${content}</main></div>`;
+      <div class="current-game">${inventorySlot('grass-block')}<div><strong>Minecraft</strong><small>JAVA EDITION</small></div></div>
+      <nav aria-label="Minecraft workspace">${tabs}</nav>
+    </aside><main class="workspace-main" id="content" data-view="${safe(activeTab)}">${content}</main></div>`;
 }
 
 function title(titleText, subtitle, servers = [], selectedId = '') {
@@ -55,7 +33,7 @@ function title(titleText, subtitle, servers = [], selectedId = '') {
 }
 
 export function emptyDashboard(servers, selected) {
-  return title('Your world starts with a connection.', 'Server readings appear after your Minecraft agent connects.', servers, selected?.id) + `${selected ? `<div class="notice amber"><b>OFFLINE / NO RECENT HEARTBEAT</b> · ${selected.lastSeen ? safe(new Date(selected.lastSeen).toLocaleString()) : "Agent has not connected yet"}. Check the server or agent connection.</div>` : ""}<section class="empty-state"><div class="empty-symbol">▧</div><div class="eyebrow">${selected ? 'WAITING FOR REAL TELEMETRY' : 'NO SERVER CONNECTED'}</div><h2>${selected ? safe(selected.name) + ' is waiting for its agent.' : 'Connect your first Minecraft server.'}</h2><p>${selected ? 'The connection has been registered, but no fresh server telemetry is available. Install the Paper plugin using your server’s configuration, then return here.' : 'Install the lightweight Paper plugin, connect it with a server-specific key, and your real server details will appear here.'}</p><button class="button primary" ${selected ? 'data-tab="Agent setup"' : 'id="first-server"'}>${selected ? 'View agent setup' : 'Set up a connection'} ↗</button><p class="field-hint">No CPU, memory, tick rate, entity count or prediction is shown without a fresh sample from your server.</p></section>`;
+  return title('Server overview', 'Server readings appear after your Minecraft agent connects.', servers, selected?.id) + `${selected ? `<div class="notice amber"><b>OFFLINE / NO RECENT HEARTBEAT</b> · ${selected.lastSeen ? safe(new Date(selected.lastSeen).toLocaleString()) : "Agent has not connected yet"}. Check the server or agent connection.</div>` : ""}<section class="empty-state"><img class="connection-block" src="assets/minecraft/grass-block.png" width="64" height="67" alt=""><div class="eyebrow">${selected ? 'WAITING FOR REAL TELEMETRY' : 'NO SERVER CONNECTED'}</div><h2>${selected ? safe(selected.name) + ' is waiting for its agent.' : 'Connect your first Minecraft server.'}</h2><p>${selected ? 'The connection has been registered, but no fresh server telemetry is available. Install the Paper plugin using your server’s configuration, then return here.' : 'Install the lightweight Paper plugin, connect it with a server-specific key, and your real server details will appear here.'}</p><button class="button primary" ${selected ? 'data-tab="Agent setup"' : 'id="first-server"'}>${selected ? 'View agent setup' : 'Set up a connection'} ↗</button><p class="field-hint">No CPU, memory, tick rate, entity count or prediction is shown without a fresh sample from your server.</p></section>`;
 }
 
 export function overview(data, server) {
@@ -88,12 +66,36 @@ export function history(data, server, metric = 'cpu') {
 }
 
 export function predictions(data, server) {
-  return title('Predictions & model status', 'Measured confidence belongs here, once a trained model is connected.', data.servers, server?.id) + `${server ? '<section class="panel panel-pad"><h2>Build your real training dataset</h2><p>Record confirmed server incidents, then export telemetry with those labels. Include long periods of confirmed healthy operation. Client startup reports alone cannot train server forecasting.</p><div class="actions" style="margin-top:20px"><button class="button primary" id="label-incident">Label a real incident</button><button class="button" id="export-training">Export training data</button><a class="button" href="training-source.zip" download>Training code and guide</a></div><p class="field-hint">Exports include the latest 10,000 samples and incident labels. Download regularly to preserve a larger dataset. No player locations or console messages are included.</p></section>' : ''}<section class="empty-state"><div class="empty-symbol">◇</div><span class="tag purple">MODEL NOT CONNECTED</span><h2 style="margin-top:22px">No predictions available.</h2><p>A trained LSTM inference service has not been connected to this version. Precision, recall, latency and failure probability cannot be reported yet.</p></section><section class="panel panel-pad" style="margin-top:22px"><h2>Research targets</h2><dl class="definition-list"><div><dt>Prediction horizon</dt><dd>5–10 minutes before instability</dd></div><div><dt>Precision / recall baseline</dt><dd>80% target, not measured</dd></div><div><dt>Processing latency</dt><dd>Below 2 seconds target</dd></div><div><dt>Input signals</dt><dd>CPU, memory, TPS, entities</dd></div></dl><p style="margin:20px 0 0">Train, evaluate and version the Python/LSTM model using time-ordered telemetry and labeled failures before enabling real alerts.</p></section>`;
+  return title('Predictions & model status', 'Measured confidence belongs here, once a trained model is connected.', data.servers, server?.id) + `${server ? '<section class="panel panel-pad"><h2>Build your real training dataset</h2><p>Record confirmed server incidents, then export telemetry with those labels. Include long periods of confirmed healthy operation. Client startup reports alone cannot train server forecasting.</p><div class="actions" style="margin-top:20px"><button class="button primary" id="label-incident">Label a real incident</button><button class="button" id="export-training">Export training data</button><a class="button" href="training-source.zip" download>Training code and guide</a></div><p class="field-hint">Exports include the latest 10,000 samples and incident labels. Download regularly to preserve a larger dataset. No player locations or console messages are included.</p></section>' : ''}<section class="empty-state"><div class="empty-symbol">◇</div><span class="tag purple">MODEL NOT CONNECTED</span><h2 style="margin-top:22px">No predictions available.</h2><p>A trained LSTM inference service has not been connected to this version. Precision, recall, latency and failure probability cannot be reported yet.</p></section><section class="panel panel-pad" style="margin-top:22px"><h2>Research targets</h2><dl class="definition-list"><div><dt>Prediction horizon</dt><dd>5 minutes before instability</dd></div><div><dt>Precision / recall baseline</dt><dd>80% target, not measured</dd></div><div><dt>Processing latency</dt><dd>Below 2 seconds target</dd></div><div><dt>Input signals</dt><dd>CPU, memory, TPS, entities</dd></div></dl><p style="margin:20px 0 0">Train, evaluate and version the Python/LSTM model using time-ordered telemetry and labeled failures before enabling real alerts.</p></section>`;
 }
 
-export function remediation(data, server) {
+export function remediation(data, server, includeCleared = false) {
   return title('Remediation controls', 'Observe first. Review evidence. Keep the administrator in control.', data.servers, server?.id) +
-    `<section class="panel panel-pad"><div class="setting-row"><div><b>Manual override</b><p>Block automated actions for this server. Enforced in saved server policy.</p></div><button class="switch ${server?.manualOverride ? 'on' : ''}" id="override" role="switch" aria-checked="${!!server?.manualOverride}" aria-label="Manual override" ${!server ? 'disabled' : ''}><span></span></button></div><div class="setting-row"><div><b>Automatic server commands</b><p>Manual commands are available in Console when enabled in the agent configuration. Predictions never execute commands automatically.</p></div><span class="tag">MANUAL ONLY</span></div><div class="setting-row"><div><b>Garbage collection and entity removal</b><p>These operations are not reversible by default and are excluded from automatic execution.</p></div><span class="tag amber">NOT ENABLED</span></div></section><section class="panel"><div class="panel-heading"><h2>Account audit log</h2></div><div class="table-scroll"><table><thead><tr><th>TIME</th><th>ACTION</th><th>DETAIL</th></tr></thead><tbody>${data.audit.map(row => `<tr><td>${safe(new Date(row.timestamp).toLocaleString())}</td><td>${safe(row.action)}</td><td>${safe(row.detail)}</td></tr>`).join('') || '<tr><td colspan="3">No recorded actions.</td></tr>'}</tbody></table></div></section>`;
+    `<section class="panel panel-pad"><div class="setting-row"><div><b>Manual override</b><p>Block automated actions for this server. Enforced in saved server policy.</p></div><button class="switch ${server?.manualOverride ? 'on' : ''}" id="override" role="switch" aria-checked="${!!server?.manualOverride}" aria-label="Manual override" ${!server ? 'disabled' : ''}><span></span></button></div><div class="setting-row"><div><b>Automatic server commands</b><p>Manual commands are available in Console when enabled in the agent configuration. Predictions never execute commands automatically.</p></div><span class="tag">MANUAL ONLY</span></div><div class="setting-row"><div><b>Garbage collection and entity removal</b><p>These operations are not reversible by default and are excluded from automatic execution.</p></div><span class="tag amber">NOT ENABLED</span></div></section>` + auditLog(data.audit, includeCleared);
+}
+
+
+// Cleared entries stay available for review during the account's audit window.
+export function auditLog(entries, includeCleared = false) {
+  const current = entries.filter(row => !row.cleared);
+  const visible = includeCleared ? entries : current;
+  const rows = visible.map(row => `<tr>
+    <td>${safe(new Date(row.timestamp).toLocaleString())}</td>
+    <td>${safe(row.action)}${includeCleared && row.cleared ? ' <small class="audit-status">Cleared</small>' : ''}</td>
+    <td>${safe(row.detail)}</td>
+  </tr>`).join('');
+  const empty = entries.length ? 'History cleared. New actions will appear here.' : 'No recorded actions.';
+  const toggle = current.length < entries.length
+    ? `<button class="button small" id="toggle-audit" aria-pressed="${includeCleared}">${includeCleared ? 'Hide' : 'Show'} cleared entries</button>` : '';
+
+  return `<section class="panel" aria-labelledby="audit-heading">
+    <div class="panel-heading"><h2 id="audit-heading">Account audit log</h2><div class="actions audit-actions">
+      ${toggle}<button class="button small" id="clear-audit" ${current.some(row => row.id) ? '' : 'disabled'}>Clear history</button>
+    </div></div>
+    <div class="table-scroll"><table><thead><tr><th>Time</th><th>Action</th><th>Detail</th></tr></thead>
+    <tbody>${rows || `<tr><td colspan="3">${empty}</td></tr>`}</tbody></table></div>
+    <div class="table-note">Up to 100 recent account actions from the past 90 days.</div>
+  </section>`;
 }
 
 export function agentSetup(data, server) {

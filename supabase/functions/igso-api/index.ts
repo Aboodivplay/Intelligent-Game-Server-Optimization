@@ -143,6 +143,16 @@ Deno.serve(async request => {
       return reply({ code: 'mfa_required', error: 'Sign in again and complete account verification.' }, 403, origin);
     }
     const userId = identity.data.user.id;
+    if (path === '/audit/clear' && request.method === 'POST') {
+      const { throughId } = await body(request);
+      if (typeof throughId !== 'string' || !/^[1-9]\d{0,18}$/.test(throughId) || BigInt(throughId) > 9223372036854775807n) {
+        reject('Choose a valid audit entry.');
+      }
+      // Clear only through the last entry the user saw. Later actions stay visible.
+      const saved = checked(await admin.rpc('igso_clear_audit_view', { target_owner: userId, last_entry: throughId }));
+      if (!saved) reject('The audit history changed. Refresh the workspace and try again.', 409);
+      return reply({ throughId }, 200, origin);
+    }
     if (path === '/servers' && request.method === 'POST') {
       const input = await body(request);
       const name = typeof input.name === 'string' ? input.name.trim() : '';
@@ -229,8 +239,18 @@ Deno.serve(async request => {
       const liveServer = servers.find((server:any) => server.id === id);
       const snapshot = id && presentServer(liveServer).online ? checked(await userClient.from('igso_servers').select('player_snapshot').eq('id',id).single()).player_snapshot : [];
       const commands = id ? checked(await userClient.from('igso_commands').select('id,created_at,expires_at,status,command,output').eq('server_id',id).order('created_at',{ascending:false}).limit(30)) : [];
-      const audit = checked(await userClient.from('igso_audit').select('recorded_at,action,detail').order('recorded_at', { ascending: false }).limit(100));
-      return reply({ playerStates: snapshot, commands, servers: servers.map(presentServer), telemetry: rows.reverse().map((row: any) => row.payload), audit: audit.map((row: any) => ({ timestamp: row.recorded_at, action: row.action, detail: row.detail })) }, 200, origin);
+      const auditStart = new Date(Date.now() - 90 * 86400000).toISOString();
+      const [logResult, viewResult] = await Promise.all([
+        userClient.from('igso_audit').select('id::text,recorded_at,action,detail')
+          .eq('owner_id', userId).gte('recorded_at', auditStart).order('id', { ascending: false }).limit(100),
+        admin.from('igso_audit_views').select('through_id::text').eq('owner_id', userId).maybeSingle(),
+      ]);
+      const throughId = BigInt(checked(viewResult)?.through_id || 0);
+      const audit = checked(logResult).map((row: any) => ({
+        id: row.id, timestamp: row.recorded_at, action: row.action, detail: row.detail,
+        cleared: BigInt(row.id) <= throughId,
+      }));
+      return reply({ playerStates: snapshot, commands, servers: servers.map(presentServer), telemetry: rows.reverse().map((row: any) => row.payload), audit }, 200, origin);
     }
     reject('Endpoint not found.', 404);
   } catch (error) {
@@ -239,3 +259,4 @@ Deno.serve(async request => {
     return reply({ error: status < 500 && error instanceof Error ? error.message : 'The service could not complete this request.' }, status, origin);
   }
 });
+

@@ -8,13 +8,17 @@ Use an email address and a unique password to create an account. A display name 
 
 To enable two-step login, sign in, open **Account security** on the game selection page and add an authenticator. Scan the QR code or enter its setup key, then confirm a code from the app. Add a backup authenticator before replacing your phone. The setup key belongs in your authenticator and should stay private.
 
+Open **Minecraft → Remediation → Account audit log** to review activity. **Clear history** hides the actions you have seen. **Show cleared entries** displays retained records again. New events appear in the default view.
+
+See the [GP2 design comparison](docs/gp2-alignment.md) for the implemented features and outstanding evaluation targets. The [Minecraft artwork credits](assets/minecraft/CREDITS.md) identify the resource pack and font.
+
 ## Code guide
 
 - `session.js` sends requests to Supabase Auth, handles email confirmation and refreshes the in-memory session.
 - `account-security.js` handles adding and removing authenticators. `pages.js` contains the forms, and `app.js` selects the next page after each sign-in step.
 - `supabase/functions/igso-api/index.ts` verifies the account before serving dashboard requests. Minecraft agents authenticate separately with their server key.
 - `supabase/migrations/` contains the account-security change for the existing IGSO database. The database checks current session and verification status alongside its original server ownership policies.
-- Run `node --test tests/session.test.mjs` with Node.js 22 or later to check account handling locally.
+- Run `node --test tests/session.test.mjs tests/audit.test.mjs` with Node.js 22 or later to check account handling locally.
 
 ## Deployment notes
 

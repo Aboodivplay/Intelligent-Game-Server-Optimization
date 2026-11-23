@@ -1,0 +1,36 @@
+name: Build Minecraft agents
+on:
+  push:
+    paths: ['agent/**', '.github/workflows/paper-agents.yml']
+  pull_request:
+    paths: ['agent/**', '.github/workflows/paper-agents.yml']
+permissions:
+  contents: read
+jobs:
+  agent:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - minecraft: '1.20.1'
+            java: '17'
+            profile: ''
+          - minecraft: '26.3'
+            java: '25'
+            profile: '-Ppaper-26.3'
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: ${{ matrix.java }}
+      - name: Build against the selected Paper API
+        run: mvn -B -ntp -f agent/pom.xml ${{ matrix.profile }} package
+      - uses: actions/upload-artifact@v4
+        with:
+          name: igso-agent-${{ matrix.minecraft }}
+          path: agent/target/igso-agent-1.1.0.jar

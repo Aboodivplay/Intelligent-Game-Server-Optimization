@@ -1,0 +1,10 @@
+endpoint: https://yggavdeekbljfqfyvfog.supabase.co/functions/v1/igso-api/telemetry
+server-id: YOUR_SERVER_ID
+agent-key: YOUR_PRIVATE_AGENT_KEY
+interval-seconds: 5
+# Player locations are private to the website account that owns this server.
+player-tracking: true
+remote-console:
+  enabled: false
+  # Explicit local permission. Add command roots only after reviewing their effects.
+  allowed-commands: [list, say, time, weather, difficulty, save-all]

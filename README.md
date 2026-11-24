@@ -1,12 +1,14 @@
 # Intelligent Game Server Optimization
 
-The dashboard connects a Minecraft Paper server to a private workspace. The website runs on GitHub Pages. Supabase handles accounts, telemetry storage and the workspace API.
+The dashboard connects a Paper, Forge or Fabric Minecraft server to a private workspace. The website runs on GitHub Pages. Supabase handles accounts, telemetry storage and the workspace API.
 
 ## Choose a Minecraft version
 
-An administrator selects Paper **1.20.1** or **26.3** when creating a connection. Each server keeps its own choice. For an older connection, open Minecraft → Settings to set the version. Agent setup offers its matching JAR, and Overview compares the saved setting with the version the running agent reports.
+An administrator selects the server loader and Minecraft **1.20.1** or **26.3** when creating a connection. Each server keeps its own choice. For an older connection, open Minecraft → Settings to set the version. Agent setup offers its matching JAR, and Overview compares the saved setting with the version the running agent reports.
 
-The homepage roadmap describes planned player invitations and permissions. Current dashboard access is limited to the account that owns each server.
+In **Minecraft → Settings → Manage player access**, the server owner can create a 24-hour, one-use code for a verified email. The player signs in, opens **Shared servers**, and redeems the code to see the sections the owner selected. The owner can edit or revoke access. This grants read-only dashboard access. Minecraft game admission is controlled by the server’s own allowlist.
+
+The [Forge and Fabric setup](mod-agent/README.md) covers all four mod builds. Use the [Python/SQLite collector](collector/README.md) for durable local storage and optional forwarding to the hosted dashboard.
 
 ## Accounts
 

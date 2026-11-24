@@ -1,0 +1,24 @@
+modLoader="javafml"
+loaderVersion="[47,)"
+license="All Rights Reserved"
+
+[[mods]]
+modId="igso_monitor"
+version="1.0.0"
+displayName="IGSO Server Monitor"
+displayTest="IGNORE_ALL_VERSION"
+description="Aggregate server performance monitoring for the IGSO dashboard."
+
+[[dependencies.igso_monitor]]
+modId="minecraft"
+mandatory=true
+versionRange="[1.20.1]"
+ordering="NONE"
+side="SERVER"
+
+[[dependencies.igso_monitor]]
+modId="forge"
+mandatory=true
+versionRange="[47.1.0,48)"
+ordering="NONE"
+side="SERVER"

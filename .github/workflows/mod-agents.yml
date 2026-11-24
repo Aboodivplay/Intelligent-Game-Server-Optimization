@@ -1,0 +1,38 @@
+name: Forge and Fabric agents
+on:
+  push:
+    paths: ['mod-agent/**', '.github/workflows/mod-agents.yml']
+  pull_request:
+    paths: ['mod-agent/**', '.github/workflows/mod-agents.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    strategy:
+      fail-fast: false
+      matrix:
+        loader: [forge, fabric]
+        game: ['1.20.1', '26.3']
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: ${{ matrix.loader == 'forge' && matrix.game == '1.20.1' && '17' || '25' }}
+      - name: Build the dedicated server mod
+        run: python3 mod-agent/build.py ${{ matrix.loader }} ${{ matrix.game }} --out dist
+      - name: Verify queued delivery
+        run: |
+          javac -d "$RUNNER_TEMP/igso-check" mod-agent/common/Delivery.java mod-agent/test/DeliveryCheck.java
+          java -cp "$RUNNER_TEMP/igso-check" edu.petra.igso.mods.DeliveryCheck
+      - uses: actions/upload-artifact@v4
+        with:
+          name: igso-${{ matrix.loader }}-${{ matrix.game }}
+          path: dist/*.jar

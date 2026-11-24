@@ -1,5 +1,7 @@
+import { invitePanel } from './sharing.js';
+import { loaderField, modGuide } from './monitoring.js';
 import { escapeHtml as safe, agentEndpoint } from './api.js?v=accounts-20261120';
-import { brand } from './pages.js?v=vanilla-20261124';
+import { brand } from './pages.js?v=access-20261124';
 
 export const dashboardTabs = ['Overview', 'Live players', 'Console', 'Telemetry history', 'Predictions', 'Remediation', 'Agent setup', 'Settings'];
 
@@ -34,7 +36,7 @@ export function dashboardShell(user, activeTab, content, version = '') {
   return `<header class="workspace-header">${brand()}<div class="actions"><span class="user-label">${safe(user.name)}</span><a class="text-link" href="#games">← Games</a><button class="button small" id="logout">Log out</button></div></header>
     <section class="mc-panorama" aria-label="Minecraft workspace">
       <div class="overworld-view" aria-hidden="true"></div>
-      <div class="panorama-copy"><span class="edition-label">JAVA EDITION <i></i> PAPER <span id="banner-version">${safe(version)}</span></span><strong>Minecraft</strong><p>Server workspace</p></div>
+      <div class="panorama-copy"><span class="edition-label">JAVA EDITION <i></i> <span id="banner-version">${safe(version)}</span></span><strong>Minecraft</strong><p>Server workspace</p></div>
       <a class="texture-credit" href="https://github.com/Aboodivplay/Intelligent-Game-Server-Optimization/blob/main/assets/minecraft/CREDITS.md">Texture credits</a>
     </section>
     <div class="workspace"><aside class="workspace-sidebar">
@@ -48,7 +50,7 @@ function title(titleText, subtitle, servers = [], selectedId = '') {
 }
 
 export function emptyDashboard(servers, selected) {
-  return title('Server overview', 'Server readings appear after your Minecraft agent connects.', servers, selected?.id) + `${selected ? `<div class="notice amber"><b>OFFLINE / NO RECENT HEARTBEAT</b> · ${selected.lastSeen ? safe(new Date(selected.lastSeen).toLocaleString()) : "Agent has not connected yet"}. Check the server or agent connection.</div>` : ""}<section class="empty-state"><img class="connection-block" src="assets/minecraft/grass-block.png?v=vanilla" width="64" height="67" alt=""><div class="eyebrow">${selected ? 'WAITING FOR REAL TELEMETRY' : 'NO SERVER CONNECTED'}</div><h2>${selected ? safe(selected.name) + ' is waiting for its agent.' : 'Connect your first Minecraft server.'}</h2><p>${selected ? 'The connection has been registered, but no fresh server telemetry is available. Install the Paper plugin using your server’s configuration, then return here.' : 'Install the lightweight Paper plugin, connect it with a server-specific key, and your real server details will appear here.'}</p><button class="button primary" ${selected ? 'data-tab="Agent setup"' : 'id="first-server"'}>${selected ? 'View agent setup' : 'Set up a connection'} ↗</button><p class="field-hint">No CPU, memory, tick rate, entity count or prediction is shown without a fresh sample from your server.</p></section>`;
+  return title('Server overview', 'Server readings appear after your Minecraft agent connects.', servers, selected?.id) + `${selected ? `<div class="notice amber"><b>OFFLINE / NO RECENT HEARTBEAT</b> · ${selected.lastSeen ? safe(new Date(selected.lastSeen).toLocaleString()) : "Agent has not connected yet"}. Check the server or agent connection.</div>` : ""}<section class="empty-state"><img class="connection-block" src="assets/minecraft/grass-block.png?v=vanilla" width="64" height="67" alt=""><div class="eyebrow">${selected ? 'WAITING FOR REAL TELEMETRY' : 'NO SERVER CONNECTED'}</div><h2>${selected ? safe(selected.name) + ' is waiting for its agent.' : 'Connect your first Minecraft server.'}</h2><p>${selected ? 'The connection has been registered, but no fresh server telemetry is available. Install the Paper plugin using your server’s configuration, then return here.' : 'Install the matching server agent, connect it with a server-specific key, and your real server details will appear here.'}</p><button class="button primary" ${selected ? 'data-tab="Agent setup"' : 'id="first-server"'}>${selected ? 'View agent setup' : 'Set up a connection'} ↗</button><p class="field-hint">No CPU, memory, tick rate, entity count or prediction is shown without a fresh sample from your server.</p></section>`;
 }
 
 export function overview(data, server) {
@@ -62,6 +64,7 @@ export function overview(data, server) {
     ['Tick rate', sample.tps.toFixed(2), 'TPS', 'Minecraft target: 20 TPS'],
     ['Loaded entities', sample.entities.toLocaleString(), '', 'All loaded worlds'],
   ];
+  if (Number.isFinite(sample.mspt)) cards.push(['Tick time',sample.mspt.toFixed(1),' ms','Average milliseconds per tick']);
   return title(safe(server.name), 'Real telemetry from your connected Minecraft server.', data.servers, server.id) +
     versionNotice + `<div class="notice"><span class="live-dot"></span> ONLINE · Agent connected · last sample ${safe(new Date(sample.timestamp).toLocaleTimeString())} · ${sample.players} player${sample.players === 1 ? '' : 's'} online</div><div class="metrics-grid">${cards.map(([name, value, unit, caption]) => `<article class="metric"><label>${name}</label><strong>${value}<small>${unit}</small></strong><small>${safe(caption)}</small></article>`).join('')}</div><div class="two-columns"><section class="panel"><div class="panel-heading"><h2>CPU over time</h2><span class="tag green">REAL TELEMETRY</span></div><div class="telemetry-chart">${telemetryChart(data.telemetry, 'cpu')}</div></section><section class="panel"><div class="panel-heading"><h2>Connection details</h2></div><div class="panel-pad"><dl class="definition-list"><div><dt>Game</dt><dd>Minecraft Java</dd></div><div><dt>Platform</dt><dd>${safe(sample.platform || 'Paper')}</dd></div><div><dt>Configured version</dt><dd>${safe(server.minecraftVersion || 'Choose in Settings')}</dd></div><div><dt>Version reported by agent</dt><dd>${safe(sample.minecraftVersion || 'Awaiting a version report')}</dd></div><div><dt>Players</dt><dd>${sample.players}</dd></div><div><dt>Agent sample time</dt><dd>${safe(new Date(sample.timestamp).toLocaleString())}</dd></div><div><dt>Prediction model</dt><dd>Not connected</dd></div></dl></div></section></div><section class="panel panel-pad"><h2>A clear separation between observation and prediction.</h2><p style="margin:14px 0 0">Monitoring is active for this connection. Predictive alerts become available after a trained and validated model is integrated.</p></section>`;
 }
@@ -79,7 +82,7 @@ export function telemetryChart(rows, metric) {
 export function history(data, server, metric = 'cpu') {
   if (!server) return emptyDashboard(data.servers, server);
   return title('Telemetry history', 'Actual samples retained for 30 days. Offline readings remain explicitly historical.', data.servers, server.id) +
-    `${!server.online ? '<div class="notice amber">This server is not currently connected. Any samples below are historical readings.</div>' : ''}<section class="panel"><div class="panel-heading"><h2>Recorded signals</h2><div class="chart-controls">${['cpu', 'memory', 'tps', 'entities'].map(key => `<button data-metric="${key}" class="${key === metric ? 'active' : ''}">${key.toUpperCase()}</button>`).join('')}</div></div><div class="telemetry-chart">${telemetryChart(data.telemetry, metric)}</div></section><section class="panel"><div class="panel-heading"><h2>Raw telemetry</h2><div class="actions"><button class="text-link" data-export="csv">↓ CSV</button><button class="text-link" data-export="json">↓ JSON</button></div></div><div class="table-scroll"><table><thead><tr><th>TIME</th><th>CPU</th><th>HEAP</th><th>TPS</th><th>ENTITIES</th><th>PLAYERS</th></tr></thead><tbody>${data.telemetry.slice().reverse().map(row => `<tr><td>${safe(new Date(row.timestamp).toLocaleString())}</td><td>${row.cpu}%</td><td>${row.memory}%</td><td>${row.tps}</td><td>${row.entities}</td><td>${row.players}</td></tr>`).join('') || '<tr><td colspan="6">No telemetry has been received.</td></tr>'}</tbody></table></div><div class="table-note">${data.telemetry.length} most recent samples shown. Exports contain these same recorded values.</div></section>`;
+    `${!server.online ? '<div class="notice amber">This server is not currently connected. Any samples below are historical readings.</div>' : ''}<section class="panel"><div class="panel-heading"><h2>Recorded signals</h2><div class="chart-controls">${['cpu', 'memory', 'tps', 'entities'].map(key => `<button data-metric="${key}" class="${key === metric ? 'active' : ''}">${key.toUpperCase()}</button>`).join('')}</div></div><div class="telemetry-chart">${telemetryChart(data.telemetry, metric)}</div></section><section class="panel"><div class="panel-heading"><h2>Raw telemetry</h2><div class="actions"><button class="text-link" data-export="csv">↓ CSV</button><button class="text-link" data-export="json">↓ JSON</button></div></div><div class="table-scroll"><table><thead><tr><th>TIME</th><th>CPU</th><th>HEAP</th><th>TPS</th><th>MSPT</th><th>ENTITIES</th><th>PLAYERS</th></tr></thead><tbody>${data.telemetry.slice().reverse().map(row => `<tr><td>${safe(new Date(row.timestamp).toLocaleString())}</td><td>${row.cpu}%</td><td>${row.memory}%</td><td>${row.tps}</td><td>${row.mspt ?? '—'}</td><td>${row.entities}</td><td>${row.players}</td></tr>`).join('') || '<tr><td colspan="7">No telemetry has been received.</td></tr>'}</tbody></table></div><div class="table-note">${data.telemetry.length} most recent samples shown. Exports contain these same recorded values.</div></section>`;
 }
 
 export function predictions(data, server) {
@@ -118,13 +121,14 @@ export function auditLog(entries, includeCleared = false) {
 export function agentSetup(data, server) {
   const version = server?.minecraftVersion;
   const release = releases[version];
-  const heading = title('Connect the Minecraft agent', 'Choose the Paper agent that matches your running server.', data.servers, server?.id);
+  const heading = title('Connect the Minecraft agent', 'Install the agent for your server software and Minecraft version.', data.servers, server?.id);
   if (!release) {
     const action = server ? 'data-tab="Settings"' : 'id="first-server"';
     return heading + `<section class="panel panel-pad"><h2>Choose a Minecraft version</h2>
-      <p>${server ? 'Set the version of this server in Settings.' : 'Register a Paper server and choose 1.20.1 or 26.3.'}</p>
+      <p>${server ? 'Set the version of this server in Settings.' : 'Register a Minecraft server and choose 1.20.1 or 26.3.'}</p>
       <button class="button primary" ${action}>${server ? 'Open Settings' : 'Connect a server'}</button></section>`;
   }
+  if (server.loader === 'Forge' || server.loader === 'Fabric') return heading + modGuide(server);
   return heading + `<section class="panel panel-pad">
     <h2>Paper ${safe(version)} setup</h2>
     <div class="step"><b>1. Check your server</b><p>Use the agent built for Minecraft ${safe(version)}. This build needs Java ${release.java} or later. Changing the dashboard setting updates this guide and download.</p></div>
@@ -137,10 +141,11 @@ export function agentSetup(data, server) {
 
 export function settingsPage(data, server) {
   if (!server) return emptyDashboard(data.servers, server);
-  return title('Server policy', 'Simple settings, saved securely with your account.', data.servers, server?.id) + (!server ? emptyDashboard(data.servers, server) : `<form id="policy-form" class="panel panel-pad"><div class="field-grid"><div>${versionField(server.minecraftVersion)}</div><div><label for="server-name">Server name</label><input id="server-name" name="name" maxlength="60" value="${safe(server.name)}" required></div><div><label for="threshold">Future alert confidence threshold (%)</label><input id="threshold" name="threshold" type="number" min="50" max="99" value="${server.threshold}" required></div></div><p class="field-hint">The threshold is stored for the future model integration. It does not produce predictions or execute actions in this version.</p><div class="actions" style="margin-top:25px"><button class="button primary small" type="submit">Save policy</button><button class="button small" type="button" id="rotate-key">Replace agent key</button></div><p class="field-hint">Replacing a key immediately disables the old one. Update the plugin configuration to reconnect.</p></form><section class="panel panel-pad danger-zone"><h2>Delete server connection</h2><p>Removes saved telemetry, player snapshot and command history, and disables the agent key. It does not delete your Minecraft world or stop the server.</p><button class="button danger" id="delete-server" type="button">Delete server</button></section>`);
+  return title('Server policy', 'Simple settings, saved securely with your account.', data.servers, server?.id) + (!server ? emptyDashboard(data.servers, server) : `<form id="policy-form" class="panel panel-pad"><div class="field-grid"><div>${loaderField(server.loader)}${versionField(server.minecraftVersion)}</div><div><label for="server-name">Server name</label><input id="server-name" name="name" maxlength="60" value="${safe(server.name)}" required></div><div><label for="threshold">Future alert confidence threshold (%)</label><input id="threshold" name="threshold" type="number" min="50" max="99" value="${server.threshold}" required></div></div><p class="field-hint">The threshold is stored for the future model integration. It does not produce predictions or execute actions in this version.</p><div class="actions" style="margin-top:25px"><button class="button primary small" type="submit">Save policy</button><button class="button small" type="button" id="rotate-key">Replace agent key</button></div><p class="field-hint">Replacing a key immediately disables the old one. Update the plugin configuration to reconnect.</p></form>${invitePanel()}<section class="panel panel-pad danger-zone"><h2>Delete server connection</h2><p>Removes saved telemetry, player snapshot and command history, and disables the agent key. It does not delete your Minecraft world or stop the server.</p><button class="button danger" id="delete-server" type="button">Delete server</button></section>`);
 }
 
 export function livePlayers(data, server) {
+  if (server && ['Forge','Fabric'].includes(server.loader)) return title('Live players', 'This monitoring mod collects aggregate player counts. See Overview for the latest count.',data.servers,server.id);
   if (!server?.online) return emptyDashboard(data.servers,server);
   const players=data.playerStates||[];
   const worlds=[...new Set(players.map(p=>p.world))];

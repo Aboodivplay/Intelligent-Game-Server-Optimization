@@ -6,7 +6,7 @@ const publicKey = Deno.env.get('SUPABASE_ANON_KEY')!;
 const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 const admin = createClient(projectUrl, serviceKey, { auth: { persistSession: false, autoRefreshToken: false } });
 const allowedOrigin = 'https://aboodivplay.github.io';
-const serverFields = 'id,name,threshold,manual_override,last_seen,tracking_enabled,console_enabled,minecraft_version';
+const serverFields = 'id,name,threshold,manual_override,last_seen,tracking_enabled,console_enabled,minecraft_version,loader,sample_interval';
 
 function reply(data: unknown, status = 200, origin = '') {
   return new Response(JSON.stringify(data), { status, headers: {
@@ -73,9 +73,9 @@ function checkMinecraftVersion(version: unknown) {
 
 function presentServer(server: any) {
   return {
-    id: server.id, name: server.name, threshold: server.threshold, minecraftVersion: server.minecraft_version,
+    id: server.id, name: server.name, threshold: server.threshold, minecraftVersion: server.minecraft_version, loader: server.loader, intervalSeconds: server.sample_interval,
     manualOverride: server.manual_override, trackingEnabled: server.tracking_enabled, consoleEnabled: server.console_enabled, lastSeen: server.last_seen,
-    online: !!server.last_seen && Date.now() - Date.parse(server.last_seen) < 30000,
+    online: !!server.last_seen && Date.now() - Date.parse(server.last_seen) < (server.sample_interval ? 3000 * server.sample_interval : 30000),
   };
 }
 
@@ -96,6 +96,90 @@ function validateSample(sample: any) {
   if (sample.platform !== undefined && (typeof sample.platform !== 'string' || sample.platform.length > 120)) reject('Invalid platform.');
 }
 
+const shareScopes = ['overview', 'history', 'players'];
+const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function selectedScopes(value: unknown) {
+  if (!Array.isArray(value) || !value.length || value.length > 3 || value.some(s => !shareScopes.includes(s))) {
+    reject('Choose at least one valid dashboard section.');
+  }
+  return [...new Set(value)];
+}
+
+function checkLoader(loader: unknown) {
+  if (loader !== undefined && !['Paper','Forge','Fabric'].includes(String(loader))) reject('Choose a supported server loader.');
+}
+
+// The database stores the code hash. Only the original invitation response contains the code.
+async function invitationRoutes(request: Request, path: string, user: any, origin: string, userClient: typeof admin) {
+  if (path === '/shared' && request.method === 'GET') {
+    const rows = checked(await admin.from('igso_invitations').select('server_id,igso_servers(name)').eq('member_id', user.id));
+    return reply({ servers: rows.map((r: any) => ({ id: r.server_id, name: r.igso_servers.name })) }, 200, origin);
+  }
+  if (path.startsWith('/shared/') && request.method === 'GET') {
+    const target = path.slice('/shared/'.length);
+    if (!uuid.test(target)) reject('Shared server not found.',404);
+    const view = checked(await admin.rpc('igso_observer_view', { member: user.id, target }));
+    if (!view) reject('Access to this server is unavailable.',404);
+    return reply(view,200,origin);
+  }
+  if (path === '/invitations/redeem' && request.method === 'POST') {
+    const { code } = await body(request);
+    if (!user.email_confirmed_at || !user.email) reject('Verify your account email first.',403);
+    const clean = typeof code === 'string' ? code.trim().toLowerCase().replaceAll('-','') : '';
+    if (!/^[0-9a-f]{32}$/.test(clean)) reject('This invitation is invalid or unavailable.',400);
+    // All conditions are part of one update, so concurrent claims cannot reuse the code.
+    const row = checked(await admin.from('igso_invitations').update({ member_id: user.id, code_hash:null })
+      .eq('code_hash',await hash(clean)).eq('recipient_email',user.email.toLowerCase()).is('member_id',null)
+      .gt('expires_at',new Date().toISOString()).select('server_id').maybeSingle());
+    if (!row) reject('This invitation is invalid or unavailable.',400);
+    return reply({serverId:row.server_id},200,origin);
+  }
+  const match = path.match(/^\/servers\/([^/]+)\/invitations(?:\/([^/]+))?$/);
+  if (!match) return null;
+  const [, serverId, inviteId] = match;
+  if (!uuid.test(serverId) || (inviteId && !uuid.test(inviteId))) reject('Invitation not found.',404);
+  const owned = checked(await userClient.from('igso_servers').select('id').eq('id',serverId).eq('owner_id',user.id).maybeSingle());
+  if (!owned) reject('Server not found.',404);
+  const invites = () => admin.from('igso_invitations');
+  if (!inviteId && request.method === 'GET') {
+    const rows = checked(await invites().select('id,recipient_email,scopes,expires_at,member_id').eq('server_id',serverId).order('recipient_email'));
+    return reply({invitations: rows.map((r:any) => ({ id:r.id, email:r.recipient_email, scopes:r.scopes, expiresAt:r.expires_at, active:!!r.member_id }))},200,origin);
+  }
+  if (!inviteId && request.method === 'POST') {
+    const input = await body(request);
+    const email = typeof input.email === 'string' ? input.email.trim().toLowerCase() : '';
+    if (email.length>254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email===user.email?.toLowerCase()) reject('Enter the player’s account email.');
+    const scopes = selectedScopes(input.scopes);
+    const code = newKey().slice(0,32);
+    const result = await invites().insert({server_id:serverId, recipient_email:email, scopes, code_hash:await hash(code)});
+    if (result.error?.code==='23505') reject('This player already has an invitation. Edit or revoke their access first.',409);
+    checked(result);
+    return reply({code:code.match(/.{8}/g)!.join('-')},201,origin);
+  }
+  if (inviteId && (request.method==='PATCH' || request.method==='DELETE')) {
+    const query = request.method==='DELETE' ? invites().delete() : invites().update({scopes:selectedScopes((await body(request)).scopes)});
+    const row = checked(await query.eq('server_id',serverId).eq('id',inviteId).select('id').maybeSingle());
+    if (!row) reject('Invitation not found.',404);
+    return reply({saved:true},200,origin);
+  }
+  reject('Method not allowed.',405);
+}
+
+async function modSample(sample:any, server:any, credential:string, origin:string) {
+  validateSample(sample);
+  const time = typeof sample.timestamp==='string' ? Date.parse(sample.timestamp) : NaN;
+  if (!uuid.test(sample.sampleId) || !Number.isFinite(time) || time > Date.now()+5000 || time < Date.now()-30*86400000 ||
+      !Number.isInteger(sample.intervalSeconds) || sample.intervalSeconds<1 || sample.intervalSeconds>5 ||
+      !Number.isFinite(sample.mspt) || sample.mspt<0 || !sample.minecraftVersion) reject('Invalid mod sample or timestamp.');
+  const {cpu,memory,tps,entities,players,mspt,memoryUsedMb,memoryMaxMb,minecraftVersion,platform,sampleId,intervalSeconds} = sample;
+  const timestamp = new Date(time).toISOString();
+  const reading = {cpu,memory,tps,entities,players,mspt,memoryUsedMb,memoryMaxMb,minecraftVersion,platform,sampleId,intervalSeconds,timestamp};
+  const result = checked(await admin.rpc('igso_deliver_sample',{target:server.id,credential,sample:sampleId,observed:timestamp,seconds:intervalSeconds,reading}));
+  if (result==='unauthorized') reject('Invalid agent credentials or loader.',401);
+  return reply({received:true, duplicate:result==='duplicate'},result==='duplicate'?200:201,origin);
+}
+
 Deno.serve(async request => {
   const origin = request.headers.get('origin') || '';
   try {
@@ -107,8 +191,14 @@ Deno.serve(async request => {
       // A distinct server key permits ingestion only, never dashboard access.
       if (!/^[a-f0-9]{64}$/.test(token)) reject('Invalid agent credentials.', 401);
       const sample = await body(request);
-      const server = checked(await admin.from('igso_servers').select('id,last_seen').eq('id', String(sample.serverId || '')).eq('agent_key_hash', await hash(token)).maybeSingle());
+      const credential = await hash(token);
+      const server = checked(await admin.from('igso_servers').select('id,last_seen,loader').eq('id', String(sample.serverId || '')).eq('agent_key_hash', credential).maybeSingle());
       if (!server) reject('Invalid agent credentials.', 401);
+      if (server.loader !== 'Paper') {
+        if (sample.platform !== server.loader) reject('The configured loader and the reporting agent do not match.',409);
+        return await modSample(sample,server,credential,origin);
+      }
+      if (sample.platform === 'Forge' || sample.platform === 'Fabric') reject('Choose the matching loader in Settings.',409);
       if (server.last_seen && Date.now() - Date.parse(server.last_seen) < 2000) reject('Sample received too quickly.', 429);
       validateSample(sample);
       const playerStates = [];
@@ -154,6 +244,8 @@ Deno.serve(async request => {
       return reply({ code: 'mfa_required', error: 'Sign in again and complete account verification.' }, 403, origin);
     }
     const userId = identity.data.user.id;
+    const access = await invitationRoutes(request,path,identity.data.user,origin,userClient);
+    if (access) return access;
     if (path === '/audit/clear' && request.method === 'POST') {
       const { throughId } = await body(request);
       if (typeof throughId !== 'string' || !/^[1-9]\d{0,18}$/.test(throughId) || BigInt(throughId) > 9223372036854775807n) {
@@ -167,13 +259,14 @@ Deno.serve(async request => {
     if (path === '/servers' && request.method === 'POST') {
       const input = await body(request);
       checkMinecraftVersion(input.minecraftVersion);
+      checkLoader(input.loader);
       const name = typeof input.name === 'string' ? input.name.trim() : '';
       if (name.length < 2 || name.length > 60) reject('Use a name between 2 and 60 characters.');
       const existing = await userClient.from('igso_servers').select('id', { count: 'exact', head: true });
       if (existing.error) reject('Could not verify server limit.', 500);
       if ((existing.count || 0) >= 10) reject('Limit of ten server connections reached.');
       const key = newKey();
-      const server = checked(await admin.from('igso_servers').insert({ owner_id: userId, name, minecraft_version: input.minecraftVersion, agent_key_hash: await hash(key) }).select(serverFields).single());
+      const server = checked(await admin.from('igso_servers').insert({ owner_id: userId, name, loader:input.loader || 'Paper', minecraft_version: input.minecraftVersion, agent_key_hash: await hash(key) }).select(serverFields).single());
       await recordAudit(userId, 'Server registered', name);
       return reply({ server: presentServer(server), agentKey: key }, 201, origin);
     }
@@ -235,12 +328,14 @@ Deno.serve(async request => {
       if (match[2] || request.method !== 'PATCH') reject('Method not allowed.', 405);
       const input = await body(request);
       checkMinecraftVersion(input.minecraftVersion);
+      checkLoader(input.loader);
       const name = input.name === undefined ? server.name : input.name;
       const threshold = input.threshold === undefined ? server.threshold : input.threshold;
       const override = input.manualOverride === undefined ? server.manual_override : input.manualOverride;
       if (typeof name !== 'string' || name.trim().length < 2 || name.trim().length > 60 || !Number.isInteger(threshold) || threshold < 50 || threshold > 99 || typeof override !== 'boolean') reject('Invalid server policy.');
       // Update only supplied fields so a concurrent override cannot undo a version change.
       const changes: Record<string, unknown> = {};
+      if (input.loader !== undefined) changes.loader = input.loader;
       if (input.name !== undefined) changes.name = name.trim();
       if (input.threshold !== undefined) changes.threshold = threshold;
       if (input.manualOverride !== undefined) changes.manual_override = override;

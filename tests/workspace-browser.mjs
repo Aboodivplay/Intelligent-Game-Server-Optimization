@@ -49,7 +49,7 @@ try {
     const scene = page.locator('.home-panorama');
     await scene.evaluate(img => img.decode());
     await page.getByRole('heading', { name: 'Under development' }).waitFor();
-    assert.equal(await page.locator('#development details').count(), 6);
+    assert.equal(await page.locator('#development details').count(), 4);
     assert.equal(await page.locator('.block-slots img').count(), 3);
     await page.locator('.block-slots img').evaluateAll(images => Promise.all(images.map(img => img.decode())));
     assert.doesNotMatch(await scene.evaluate(el => getComputedStyle(el).cursor), /crosshair.png/);

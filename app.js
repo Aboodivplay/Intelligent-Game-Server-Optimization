@@ -1,8 +1,10 @@
+import { manageInvites, bindShared, sharedPage } from './sharing.js';
+import { agentConfig, loaderField } from './monitoring.js';
 import { showAccountSecurity } from './account-security.js?v=accounts-20261120';
 import { api, openApp, escapeHtml as safe, download, agentEndpoint } from './api.js?v=accounts-20261120';
 import { readEmailAction, sendPasswordReset, changePassword, resendConfirmation, verifyAuthenticator, clearSession } from './session.js?v=accounts-20261120';
-import { landing, authPage, gameSelection, verificationPage, passwordChangePage } from './pages.js?v=vanilla-20261124';
-import { versionField, dashboardShell, overview, history, predictions, remediation, agentSetup, settingsPage, livePlayers, consolePage } from './dashboard.js?v=vanilla-20261124';
+import { landing, authPage, gameSelection, verificationPage, passwordChangePage } from './pages.js?v=access-20261124';
+import { versionField, dashboardShell, overview, history, predictions, remediation, agentSetup, settingsPage, livePlayers, consolePage } from './dashboard.js?v=access-20261124';
 
 // Only navigation and current UI state live here. Server records come from the API.
 let user = null;
@@ -18,6 +20,7 @@ let chartMetric = 'cpu';
 let requestInProgress = false;
 let routeVersion = 0;
 let sectionObserver = null;
+let refreshShared = null;
 const app = document.querySelector('#app');
 const modal = document.querySelector('#modal');
 const selectedServer = () => dashboard.servers.find(server => server.id === serverId);
@@ -79,11 +82,11 @@ function drawDashboard() {
   const version = server?.minecraftVersion || '';
   document.body.dataset.minecraftVersion = version;
   const label = app.querySelector('#banner-version');
-  if (label) label.textContent = version;
+  if (label) label.textContent = [server?.loader, version].filter(Boolean).join(' ');
   const content = renderTab[activeTab]();
   const main = app.querySelector('.workspace-main');
   if (!main) {
-    app.innerHTML = dashboardShell(user, activeTab, content, version);
+    app.innerHTML = dashboardShell(user, activeTab, content, [server?.loader, version].filter(Boolean).join(' '));
     animateSections();
     bindControls();
     return;
@@ -111,6 +114,7 @@ async function renderRoute() {
   const route = location.hash.slice(1) || 'home';
   document.body.classList.toggle('minecraft-theme', route === 'minecraft');
   const version = ++routeVersion;
+  refreshShared = null;
   if (pendingLogin && route !== 'verify-login') {
     location.hash = 'verify-login';
     return;
@@ -136,7 +140,7 @@ async function renderRoute() {
     document.getElementById(route)?.scrollIntoView();
     return;
   }
-  if (['games', 'minecraft'].includes(route) && !user) {
+  if (['games', 'minecraft', 'shared'].includes(route) && !user) {
     location.hash = 'login';
     return;
   }
@@ -153,6 +157,9 @@ async function renderRoute() {
   } else if (route === 'games') {
     app.innerHTML = gameSelection(user);
     animateSections();
+  } else if (route === 'shared') {
+    app.innerHTML = sharedPage();
+    refreshShared = bindShared();
   } else if (route === 'minecraft') {
     app.innerHTML = '<main class="loading" id="content"><div><div class="spinner"></div>Loading your Minecraft workspace…</div></main>';
     try {
@@ -303,13 +310,22 @@ function passwordResetDialog() {
   };
 }
 
+function showAgentConfig(server, key) {
+  const config = agentConfig(server, key);
+  showModal(`<h2>Save your agent configuration</h2>
+    <p>Place this file in <code>${safe(config.folder)}</code> on your Minecraft server. The key is shown once.</p>
+    <pre class="code">${safe(config.text)}</pre><div class="actions"><button class="button" data-close>Close</button>
+    <button class="button primary" id="download-config">Download ${safe(config.name)}</button></div>`);
+  modal.querySelector('#download-config').onclick = () => download(config.name, config.text, 'text/plain');
+}
+
 function connectServer() {
   showModal(`<h2>Connect a Minecraft server</h2>
-    <p>Choose the version already running on your Paper server. We’ll use it to select the matching agent.</p>
+    <p>Choose the software and Minecraft version already running on your server.</p>
     <form id="new-server-form">
       <label for="connection-name">Server name</label>
       <input id="connection-name" name="name" maxlength="60" minlength="2" required placeholder="Our survival world">
-      ${versionField()}<div class="form-error" id="connection-error" role="alert"></div>
+      ${loaderField()}${versionField()}<div class="form-error" id="connection-error" role="alert"></div>
       <div class="actions"><button type="button" class="button" data-close>Cancel</button>
       <button class="button primary" type="submit">Create connection</button></div>
     </form>`);
@@ -320,12 +336,10 @@ function connectServer() {
     try {
       const fields = new FormData(event.target);
       const result = await api('/servers', { method: 'POST', body: JSON.stringify({
-        name: fields.get('name'), minecraftVersion: fields.get('minecraftVersion'),
+        name: fields.get('name'), minecraftVersion: fields.get('minecraftVersion'), loader: fields.get('loader'),
       }) });
       serverId = result.server.id;
-      const config = `endpoint: ${agentEndpoint()}\nserver-id: ${serverId}\nagent-key: ${result.agentKey}\ninterval-seconds: 5\nplayer-tracking: true\nremote-console:\n  enabled: false\n  allowed-commands: [list, say, time, weather, difficulty, save-all]\n`;
-      showModal(`<div class="eyebrow">CONNECTION CREATED</div><h2>Save your agent configuration.</h2><p>This private key is shown once. Put the file only in your Minecraft server’s plugin folder. It permits telemetry ingestion for this server, not account access.</p><pre class="code">${safe(config)}</pre><div class="actions"><button class="button" data-close>Close</button><button class="button primary" id="download-config">↓ Download config.yml</button></div>`);
-      document.querySelector('#download-config').onclick = () => download('config.yml', config, 'text/yaml');
+      showAgentConfig(result.server, result.agentKey);
       await loadDashboard();
       activeTab = 'Agent setup';
       drawDashboard();
@@ -349,7 +363,7 @@ function exportTelemetry(format) {
   const name = exportName('telemetry', loadedServerId, format);
   if (format === 'json') return download(name, JSON.stringify(rows, null, 2));
 
-  const columns = ['serverId', 'timestamp', 'cpu', 'memory', 'tps', 'entities', 'players'];
+  const columns = ['serverId', 'timestamp', 'cpu', 'memory', 'tps', 'mspt', 'entities', 'players'];
   const cell = value => '"' + String(value ?? '').replaceAll('"', '""') + '"';
   const csv = [columns.join(','), ...rows.map(row => columns.map(key => cell(row[key])).join(','))].join('\r\n');
   download(name, csv, 'text/csv;charset=utf-8');
@@ -433,6 +447,7 @@ function bindControls(scope = document) {
     serverId = event.target.value;
     try { await loadDashboard(); drawDashboard(); } catch (error) { showWorkspaceError(error); }
   });
+  scope.querySelector('#manage-invites')?.addEventListener('click', () => manageInvites(selectedServer(), showModal, toast));
   scope.querySelector('#connect-server')?.addEventListener('click', connectServer);
   scope.querySelector('#first-server')?.addEventListener('click', connectServer);
   scope.querySelector('#retry')?.addEventListener('click', async () => {
@@ -462,9 +477,7 @@ function bindControls(scope = document) {
       event.currentTarget.disabled = true;
       try {
         const result = await api('/servers/' + serverId + '/key', { method: 'POST' });
-        const configuration = `endpoint: ${agentEndpoint()}\nserver-id: ${serverId}\nagent-key: ${result.agentKey}\ninterval-seconds: 5\nplayer-tracking: true\nremote-console:\n  enabled: false\n  allowed-commands: [list, say, time, weather, difficulty, save-all]\n`;
-        showModal('<h2>New configuration ready.</h2><p>Your old key has been disabled. Save this configuration now; the key will not be shown again.</p><div class="actions"><button class="button" data-close>Close</button><button class="button primary" id="download-new-config">Download config.yml</button></div>');
-        document.querySelector('#download-new-config').onclick = () => download('config.yml', configuration, 'text/yaml');
+        showAgentConfig(result.server, result.agentKey);
         await loadDashboard(); drawDashboard();
       } catch (error) { toast(error.message); modal.close(); }
     };
@@ -507,7 +520,7 @@ function bindControls(scope = document) {
     event.preventDefault();
     const fields = new FormData(event.currentTarget);
     try {
-      await api('/servers/' + serverId, { method: 'PATCH', body: JSON.stringify({ name: fields.get('name'), threshold: Number(fields.get('threshold')), minecraftVersion: fields.get('minecraftVersion') }) });
+      await api('/servers/' + serverId, { method: 'PATCH', body: JSON.stringify({ name: fields.get('name'), threshold: Number(fields.get('threshold')), minecraftVersion: fields.get('minecraftVersion'), loader: fields.get('loader') }) });
       await loadDashboard(); drawDashboard(); toast('Server policy saved.');
     } catch (error) { toast(error.message); }
   });
@@ -515,6 +528,7 @@ function bindControls(scope = document) {
 
 // Refresh only the live workspace. Do not erase forms or let an API failure leave stale live readings.
 setInterval(async () => {
+  if (refreshShared && !document.hidden) return refreshShared();
   if (location.hash !== '#minecraft' || !user || document.hidden || requestInProgress || modal.open || activeTab === 'Settings') return;
   if (document.activeElement?.closest('.workspace-main button:focus-visible, input, select, textarea')) return;
   requestInProgress = true;

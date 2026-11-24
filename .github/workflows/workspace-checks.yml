@@ -2,9 +2,9 @@ name: Workspace checks
 on:
   push:
     branches: [main]
-    paths: ['*.js', '*.html', '*.css', 'assets/minecraft/**', 'tests/**', '.github/workflows/workspace-checks.yml']
+    paths: ['*.js', '*.html', '*.css', 'assets/minecraft/**', 'tests/**', 'mods/**', 'collector/**', '.github/workflows/workspace-checks.yml']
   pull_request:
-    paths: ['*.js', '*.html', '*.css', 'assets/minecraft/**', 'tests/**', '.github/workflows/workspace-checks.yml']
+    paths: ['*.js', '*.html', '*.css', 'assets/minecraft/**', 'tests/**', 'mods/**', 'collector/**', '.github/workflows/workspace-checks.yml']
 
 permissions:
   contents: read
@@ -27,6 +27,13 @@ jobs:
         run: |
           python3 -m http.server 4173 --bind 127.0.0.1 >/tmp/igso-web.log 2>&1 &
           node tests/workspace-browser.mjs
+          node tests/invitations-browser.mjs
+          node tests/mod-setup-browser.mjs
+      - name: Test SQLite storage and recovery after a one-minute outage
+        working-directory: collector
+        run: |
+          python3 -m unittest -v
+          python3 outage_check.py
       - name: Check the published sign-in services
         if: github.event_name == 'push'
         run: node tests/published-site.mjs

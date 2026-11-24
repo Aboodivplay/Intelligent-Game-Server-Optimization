@@ -264,3 +264,14 @@ button.supported-game:hover, button.supported-game:focus-visible { border-color:
   .supported-game { padding: 18px; gap: 14px; }
   .auth-form-wrap { padding-top: 38px; }
 }
+
+.shared-page { max-width: 900px; padding-block: 48px; }
+.shared-page h1 { margin: 20px 0; }
+.shared-page .panel, .invite-entry { margin-block: 16px; }
+.shared-page input { margin-bottom: 12px; }
+.scope-choice { display: flex; align-items: center; gap: 8px; margin: 8px 0; }
+.scope-choice input { width: auto; margin: 0; }
+.invite-entry { padding-bottom: 12px; border-bottom: 1px solid var(--border); }
+.invite-entry strong, .invite-code { display: block; overflow-wrap: anywhere; }
+.invite-code { user-select: all; margin: 18px 0; font-size: 1.05rem; }
+#modal fieldset { border: 1px solid var(--border); margin: 12px 0; padding: 8px 12px; }

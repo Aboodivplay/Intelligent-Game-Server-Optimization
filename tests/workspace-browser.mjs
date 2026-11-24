@@ -26,14 +26,15 @@ try {
     const errors = [];
     page.on('pageerror', error => errors.push(error.message));
     let throughId = 0;
-    let dashboardOffline = false;
+    let dashboardFailure = '';
     const entries = [{ id: '41', action: 'Server registered', detail: 'Paper', timestamp: '2026-11-20T10:00:00Z' }];
 
     // Only API responses are fixtures. The HTML, styles, artwork and controls are served from this checkout.
     await page.route('**/api/**', async route => {
       const path = new URL(route.request().url()).pathname;
       if (path === '/api/auth/me') return route.fulfill({ json: { user: { id: 'test', name: 'Student' } } });
-      if (path === '/api/dashboard' && dashboardOffline) return route.fulfill({ status: 503, json: { error: 'Temporarily offline' } });
+      if (path === '/api/dashboard' && dashboardFailure === 'network') return route.abort('internetdisconnected');
+      if (path === '/api/dashboard' && dashboardFailure === 'server') return route.fulfill({ status: 500, json: { error: 'The service could not complete this request.' } });
       if (path === '/api/dashboard') return route.fulfill({ json: {
         servers: [], telemetry: [], audit: entries.map(row => ({ ...row, cleared: Number(row.id) <= throughId })),
       } });
@@ -71,9 +72,12 @@ try {
     }
     if (width === 1440) {
       const original = await panorama.elementHandle();
-      dashboardOffline = true;
-      await page.getByRole('button', { name: 'Try again' }).waitFor();
-      dashboardOffline = false;
+      dashboardFailure = 'server';
+      await page.getByText('The server returned HTTP 500.', { exact: false }).waitFor();
+      dashboardFailure = 'network';
+      await page.getByRole('button', { name: 'Try again' }).click();
+      await page.getByText('The workspace service is unreachable.', { exact: false }).waitFor();
+      dashboardFailure = '';
       await page.getByRole('button', { name: 'Try again' }).click();
       await page.getByRole('heading', { name: 'Server overview' }).waitFor();
       assert.ok(await original.evaluate(el => el === document.querySelector('.overworld-view')));

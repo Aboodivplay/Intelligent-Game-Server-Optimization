@@ -179,7 +179,10 @@ function showWorkspaceError(error) {
     location.hash = 'login';
     toast(error.code === 'mfa_required' ? 'Sign in again to verify your authenticator.' : 'Your session expired. Please log in again.');
   } else {
-    const content = `<section class="empty-state"><h2>We cannot reach the backend.</h2><p>${safe(error.message)}. Live server details are hidden until the connection recovers.</p><button class="button primary" id="retry">Try again</button></section>`;
+    const detail = error.status >= 500
+      ? `The server returned HTTP ${error.status}. Try again in a moment.`
+      : error.message;
+    const content = `<section class="empty-state"><h2>Could not load your workspace</h2><p>${safe(detail)}</p><button class="button primary" id="retry">Try again</button></section>`;
     const main = app.querySelector('.workspace-main');
     if (main) {
       main.innerHTML = content;

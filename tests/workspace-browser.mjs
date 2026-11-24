@@ -24,6 +24,14 @@ try {
       return route.fulfill({ status: 404, json: { error: 'Unexpected test request' } });
     });
 
+    await page.goto('http://127.0.0.1:4173/#home');
+    await page.locator('.forest-island').evaluate(img => img.decode());
+    await page.getByRole('heading', { name: 'Under development' }).waitFor();
+    assert.equal(await page.locator('#development details').count(), 6);
+    assert.equal(await page.locator('.forest-block').count(), 3);
+    await page.emulateMedia({ reducedMotion: 'no-preference' });
+    assert.equal(await page.locator('.forest-island').evaluate(el => getComputedStyle(el).animationName), 'island-hover');
+    await page.emulateMedia({ reducedMotion: 'reduce' });
     await page.goto('http://127.0.0.1:4173/#minecraft');
     await page.getByRole('heading', { name: 'Server overview' }).waitFor();
     await page.locator('.connection-block').evaluate(image => image.decode());
@@ -32,6 +40,9 @@ try {
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
     assert.equal(await page.locator('.overworld-view').evaluate(el => getComputedStyle(el).animationName), 'none');
 
+    await page.locator('#connect-server').click();
+    assert.deepEqual(await page.locator('#minecraft-version option').evaluateAll(options => options.map(option => option.value)), ['', '1.20.1', '26.3']);
+    await page.getByRole('button', { name: 'Cancel' }).click();
     await page.getByRole('button', { name: 'Remediation' }).click();
     const clear = page.getByRole('button', { name: 'Clear history', exact: true });
     await clear.click();

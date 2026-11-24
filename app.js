@@ -1,8 +1,8 @@
 import { showAccountSecurity } from './account-security.js?v=accounts-20261120';
 import { api, openApp, escapeHtml as safe, download, agentEndpoint } from './api.js?v=accounts-20261120';
 import { readEmailAction, sendPasswordReset, changePassword, resendConfirmation, verifyAuthenticator, clearSession } from './session.js?v=accounts-20261120';
-import { landing, authPage, gameSelection, verificationPage, passwordChangePage } from './pages.js?v=overworld-20261123';
-import { dashboardShell, overview, history, predictions, remediation, agentSetup, settingsPage, livePlayers, consolePage } from './dashboard.js?v=overworld-20261123';
+import { landing, authPage, gameSelection, verificationPage, passwordChangePage } from './pages.js?v=forest-20261124';
+import { versionField, dashboardShell, overview, history, predictions, remediation, agentSetup, settingsPage, livePlayers, consolePage } from './dashboard.js?v=forest-20261124';
 
 // Only navigation and current UI state live here. Server records come from the API.
 let user = null;
@@ -49,7 +49,7 @@ function animateSections() {
       }
     });
   }, { threshold: 0.08 });
-  document.querySelectorAll('.reveal, .world, .game-card.locked').forEach(element => sectionObserver.observe(element));
+  document.querySelectorAll('.reveal, .world, .mc-panorama').forEach(element => sectionObserver.observe(element));
 }
 
 async function loadDashboard() {
@@ -76,10 +76,15 @@ function drawDashboard() {
     'Agent setup': () => agentSetup(dashboard, server),
     'Settings': () => settingsPage(dashboard, server),
   };
+  const version = server?.minecraftVersion || '';
+  document.body.dataset.minecraftVersion = version;
+  const label = app.querySelector('#banner-version');
+  if (label) label.textContent = version;
   const content = renderTab[activeTab]();
   const main = app.querySelector('.workspace-main');
   if (!main) {
-    app.innerHTML = dashboardShell(user, activeTab, content);
+    app.innerHTML = dashboardShell(user, activeTab, content, version);
+    animateSections();
     bindControls();
     return;
   }
@@ -124,7 +129,7 @@ async function renderRoute() {
     return;
   }
   // Section links scroll within the public presentation instead of rebuilding it.
-  if (['capabilities', 'how-it-works', 'project', 'games'].includes(route) && route !== 'games') {
+  if (['capabilities', 'how-it-works', 'development', 'project', 'games'].includes(route) && route !== 'games') {
     if (!document.querySelector('.hero')) app.innerHTML = landing(user);
     bindControls();
     animateSections();
@@ -288,13 +293,24 @@ function passwordResetDialog() {
 }
 
 function connectServer() {
-  showModal('<div class="eyebrow">MINECRAFT JAVA / PAPER</div><h2>Connect a real server.</h2><p>Give the connection a name. You will receive a private key and configuration for the Paper agent. Metrics stay hidden until the agent sends telemetry.</p><form id="new-server-form"><label for="connection-name">Server name</label><input id="connection-name" name="name" maxlength="60" minlength="2" required placeholder="e.g. Our survival world"><div class="form-error" id="connection-error" role="alert"></div><div class="actions"><button type="button" class="button" data-close>Cancel</button><button class="button primary" type="submit">Create connection</button></div></form>');
+  showModal(`<h2>Connect a Minecraft server</h2>
+    <p>Choose the version already running on your Paper server. We’ll use it to select the matching agent.</p>
+    <form id="new-server-form">
+      <label for="connection-name">Server name</label>
+      <input id="connection-name" name="name" maxlength="60" minlength="2" required placeholder="Our survival world">
+      ${versionField()}<div class="form-error" id="connection-error" role="alert"></div>
+      <div class="actions"><button type="button" class="button" data-close>Cancel</button>
+      <button class="button primary" type="submit">Create connection</button></div>
+    </form>`);
   document.querySelector('#new-server-form').onsubmit = async event => {
     event.preventDefault();
     const button = event.currentTarget.querySelector('[type="submit"]');
     button.disabled = true;
     try {
-      const result = await api('/servers', { method: 'POST', body: JSON.stringify({ name: document.querySelector('#connection-name').value }) });
+      const fields = new FormData(event.target);
+      const result = await api('/servers', { method: 'POST', body: JSON.stringify({
+        name: fields.get('name'), minecraftVersion: fields.get('minecraftVersion'),
+      }) });
       serverId = result.server.id;
       const config = `endpoint: ${agentEndpoint()}\nserver-id: ${serverId}\nagent-key: ${result.agentKey}\ninterval-seconds: 5\nplayer-tracking: true\nremote-console:\n  enabled: false\n  allowed-commands: [list, say, time, weather, difficulty, save-all]\n`;
       showModal(`<div class="eyebrow">CONNECTION CREATED</div><h2>Save your agent configuration.</h2><p>This private key is shown once. Put the file only in your Minecraft server’s plugin folder. It permits telemetry ingestion for this server, not account access.</p><pre class="code">${safe(config)}</pre><div class="actions"><button class="button" data-close>Close</button><button class="button primary" id="download-config">↓ Download config.yml</button></div>`);
@@ -474,7 +490,7 @@ function bindControls(scope = document) {
     event.preventDefault();
     const fields = new FormData(event.currentTarget);
     try {
-      await api('/servers/' + serverId, { method: 'PATCH', body: JSON.stringify({ name: fields.get('name'), threshold: Number(fields.get('threshold')) }) });
+      await api('/servers/' + serverId, { method: 'PATCH', body: JSON.stringify({ name: fields.get('name'), threshold: Number(fields.get('threshold')), minecraftVersion: fields.get('minecraftVersion') }) });
       await loadDashboard(); drawDashboard(); toast('Server policy saved.');
     } catch (error) { toast(error.message); }
   });

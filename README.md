@@ -2,6 +2,12 @@
 
 The dashboard connects a Minecraft Paper server to a private workspace. The website runs on GitHub Pages. Supabase handles accounts, telemetry storage and the workspace API.
 
+## Choose a Minecraft version
+
+An administrator selects Paper **1.20.1** or **26.3** when creating a connection. Each server keeps its own choice. For an older connection, open Minecraft → Settings to set the version. Agent setup offers its matching JAR, and Overview compares the saved setting with the version the running agent reports.
+
+The homepage roadmap describes planned player invitations and permissions. Current dashboard access is limited to the account that owns each server.
+
 ## Accounts
 
 Use an email address and a unique password to create an account. A display name is optional. Open the confirmation email in the same browser that requested it. Password recovery uses the same browser check. The page keeps signed-in sessions in memory, so refreshing or closing it requires another login.

@@ -19,9 +19,15 @@
 .minecraft-theme .brand { color:#edf1e8; }
 .minecraft-theme .user-label { color:#a6b5b8; font-size:12px; }
 
-/* The landscape is one local image. Only its position changes during the pan. */
+/* Move one filtered image on the compositor. This avoids stepping between enlarged pixels. */
 .mc-panorama { height:clamp(195px,19vw,282px); position:relative; overflow:hidden; isolation:isolate; background:#537d85; border-bottom:4px solid #171a15; }
-.overworld-view { position:absolute; inset:0 -1.5%; background:url('assets/minecraft/overworld.png') 58% 55% / cover no-repeat; image-rendering:pixelated; }
+.overworld-view {
+  --pan-distance: clamp(32px, 4vw, 72px);
+  position: absolute;
+  inset: 0 calc(0px - var(--pan-distance) - 2px);
+  background: url('assets/minecraft/dappled-forest.webp') 58% 55% / cover no-repeat;
+}
+[data-minecraft-version="1.20.1"] .overworld-view { background-image: url('assets/minecraft/overworld.png'); }
 .mc-panorama::after { content:''; position:absolute; inset:0; background:linear-gradient(90deg,#142019eb,#142019a6 26%,transparent 59%); pointer-events:none; }
 .panorama-copy { position:absolute; left:clamp(20px,4vw,65px); top:50%; transform:translateY(-50%); z-index:1; }
 .edition-label { display:flex; align-items:center; gap:9px; color:#e1ecca; font:600 10px/1.2 system-ui,sans-serif; letter-spacing:2px; }
@@ -36,14 +42,17 @@
 .audit-actions { flex-wrap:wrap; }
 
 @media (prefers-reduced-motion:no-preference) {
-  .overworld-view { animation:overworld-pan 24s ease-in-out infinite alternate; }
+  .overworld-view { animation:overworld-pan 12s linear infinite alternate; will-change:transform; }
   .connection-block { animation:block-float 4s ease-in-out infinite alternate; }
   .minecraft-theme .workspace-sidebar nav button:hover img { transform:translateY(-2px); }
   .minecraft-theme .button:active { translate:0 2px; }
   .minecraft-theme .inventory-slot img { transition:transform .15s ease-out; }
-  .motion-paused .overworld-view,.motion-paused .connection-block { animation-play-state:paused; }
+  .mc-panorama.offscreen-motion .overworld-view,.motion-paused .overworld-view,.motion-paused .connection-block { animation-play-state:paused; }
 }
-@keyframes overworld-pan { from { transform:translateX(-1%); } to { transform:translateX(1%); } }
+@keyframes overworld-pan {
+  from { transform: translate3d(calc(0px - var(--pan-distance)), 0, 0); }
+  to { transform: translate3d(var(--pan-distance), 0, 0); }
+}
 @keyframes block-float { to { transform:translateY(-4px); } }
 
 /* Stone surfaces, emerald actions and a consistent navigation rail. */

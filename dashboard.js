@@ -1,5 +1,5 @@
 import { escapeHtml as safe, agentEndpoint } from './api.js?v=accounts-20261120';
-import { brand } from './pages.js?v=overworld-20261123';
+import { brand } from './pages.js?v=forest-20261124';
 
 export const dashboardTabs = ['Overview', 'Live players', 'Console', 'Telemetry history', 'Predictions', 'Remediation', 'Agent setup', 'Settings'];
 
@@ -10,7 +10,22 @@ function inventorySlot(item) {
   return `<span class="inventory-slot" aria-hidden="true"><img src="assets/minecraft/${item}.png" alt="" width="24" height="24"></span>`;
 }
 
-export function dashboardShell(user, activeTab, content) {
+const releases = {
+  '1.20.1': { java: 17, agent: 'igso-agent.jar' },
+  '26.3': { java: 25, agent: 'igso-agent-26.3.jar' },
+};
+
+export function versionField(selected = '') {
+  const options = Object.keys(releases).map(version =>
+    `<option value="${version}" ${selected === version ? 'selected' : ''}>${version}</option>`
+  ).join('');
+  return `<label for="minecraft-version">Minecraft version</label>
+    <select id="minecraft-version" name="minecraftVersion" required>
+      <option value="" disabled ${selected ? '' : 'selected'}>Choose your server version</option>${options}
+    </select>`;
+}
+
+export function dashboardShell(user, activeTab, content, version = '') {
   const tabs = dashboardTabs.map((tab, index) => {
     const current = tab === activeTab ? 'class="active" aria-current="page"' : '';
     return `<button data-tab="${tab}" ${current}>${inventorySlot(navigationItems[index])}<span>${tab}</span></button>`;
@@ -19,7 +34,7 @@ export function dashboardShell(user, activeTab, content) {
   return `<header class="workspace-header">${brand()}<div class="actions"><span class="user-label">${safe(user.name)}</span><a class="text-link" href="#games">← Games</a><button class="button small" id="logout">Log out</button></div></header>
     <section class="mc-panorama" aria-label="Minecraft workspace">
       <div class="overworld-view" aria-hidden="true"></div>
-      <div class="panorama-copy"><span class="edition-label">JAVA EDITION <i></i> PAPER</span><strong>Minecraft</strong><p>Server workspace</p></div>
+      <div class="panorama-copy"><span class="edition-label">JAVA EDITION <i></i> PAPER <span id="banner-version">${safe(version)}</span></span><strong>Minecraft</strong><p>Server workspace</p></div>
       <a class="texture-credit" href="https://github.com/Aboodivplay/Intelligent-Game-Server-Optimization/blob/main/assets/minecraft/CREDITS.md">Texture credits</a>
     </section>
     <div class="workspace"><aside class="workspace-sidebar">
@@ -33,12 +48,15 @@ function title(titleText, subtitle, servers = [], selectedId = '') {
 }
 
 export function emptyDashboard(servers, selected) {
-  return title('Server overview', 'Server readings appear after your Minecraft agent connects.', servers, selected?.id) + `${selected ? `<div class="notice amber"><b>OFFLINE / NO RECENT HEARTBEAT</b> · ${selected.lastSeen ? safe(new Date(selected.lastSeen).toLocaleString()) : "Agent has not connected yet"}. Check the server or agent connection.</div>` : ""}<section class="empty-state"><img class="connection-block" src="assets/minecraft/grass-block.png" width="64" height="67" alt=""><div class="eyebrow">${selected ? 'WAITING FOR REAL TELEMETRY' : 'NO SERVER CONNECTED'}</div><h2>${selected ? safe(selected.name) + ' is waiting for its agent.' : 'Connect your first Minecraft server.'}</h2><p>${selected ? 'The connection has been registered, but no fresh server telemetry is available. Install the Paper plugin using your server’s configuration, then return here.' : 'Install the lightweight Paper plugin, connect it with a server-specific key, and your real server details will appear here.'}</p><button class="button primary" ${selected ? 'data-tab="Agent setup"' : 'id="first-server"'}>${selected ? 'View agent setup' : 'Set up a connection'} ↗</button><p class="field-hint">No CPU, memory, tick rate, entity count or prediction is shown without a fresh sample from your server.</p></section>`;
+  const icon = selected?.minecraftVersion === '1.20.1' ? 'cherry-grove.webp' : 'grass-block.png';
+  return title('Server overview', 'Server readings appear after your Minecraft agent connects.', servers, selected?.id) + `${selected ? `<div class="notice amber"><b>OFFLINE / NO RECENT HEARTBEAT</b> · ${selected.lastSeen ? safe(new Date(selected.lastSeen).toLocaleString()) : "Agent has not connected yet"}. Check the server or agent connection.</div>` : ""}<section class="empty-state"><img class="connection-block" src="assets/minecraft/${icon}" width="64" height="67" alt=""><div class="eyebrow">${selected ? 'WAITING FOR REAL TELEMETRY' : 'NO SERVER CONNECTED'}</div><h2>${selected ? safe(selected.name) + ' is waiting for its agent.' : 'Connect your first Minecraft server.'}</h2><p>${selected ? 'The connection has been registered, but no fresh server telemetry is available. Install the Paper plugin using your server’s configuration, then return here.' : 'Install the lightweight Paper plugin, connect it with a server-specific key, and your real server details will appear here.'}</p><button class="button primary" ${selected ? 'data-tab="Agent setup"' : 'id="first-server"'}>${selected ? 'View agent setup' : 'Set up a connection'} ↗</button><p class="field-hint">No CPU, memory, tick rate, entity count or prediction is shown without a fresh sample from your server.</p></section>`;
 }
 
 export function overview(data, server) {
   const sample = data.telemetry.at(-1);
   if (!server?.online || !sample) return emptyDashboard(data.servers, server);
+  const mismatch = server.minecraftVersion && sample.minecraftVersion && server.minecraftVersion !== sample.minecraftVersion;
+  const versionNotice = mismatch ? `<p class="notice amber">Your agent reports Minecraft ${safe(sample.minecraftVersion)}. This server is set to ${safe(server.minecraftVersion)} in Settings.</p>` : '';
   const cards = [
     ['Host CPU', sample.cpu.toFixed(1), '%', 'Measured on your server host'],
     ['Java heap', sample.memory.toFixed(1), '%', `${sample.memoryUsedMb || '—'} / ${sample.memoryMaxMb || '—'} MB`],
@@ -46,7 +64,7 @@ export function overview(data, server) {
     ['Loaded entities', sample.entities.toLocaleString(), '', 'All loaded worlds'],
   ];
   return title(safe(server.name), 'Real telemetry from your connected Minecraft server.', data.servers, server.id) +
-    `<div class="notice"><span class="live-dot"></span> ONLINE · Agent connected · last sample ${safe(new Date(sample.timestamp).toLocaleTimeString())} · ${sample.players} player${sample.players === 1 ? '' : 's'} online</div><div class="metrics-grid">${cards.map(([name, value, unit, caption]) => `<article class="metric"><label>${name}</label><strong>${value}<small>${unit}</small></strong><small>${safe(caption)}</small></article>`).join('')}</div><div class="two-columns"><section class="panel"><div class="panel-heading"><h2>CPU over time</h2><span class="tag green">REAL TELEMETRY</span></div><div class="telemetry-chart">${telemetryChart(data.telemetry, 'cpu')}</div></section><section class="panel"><div class="panel-heading"><h2>Connection details</h2></div><div class="panel-pad"><dl class="definition-list"><div><dt>Game</dt><dd>Minecraft Java</dd></div><div><dt>Platform</dt><dd>${safe(sample.platform || 'Paper')}</dd></div><div><dt>Players</dt><dd>${sample.players}</dd></div><div><dt>Agent sample time</dt><dd>${safe(new Date(sample.timestamp).toLocaleString())}</dd></div><div><dt>Prediction model</dt><dd>Not connected</dd></div></dl></div></section></div><section class="panel panel-pad"><h2>A clear separation between observation and prediction.</h2><p style="margin:14px 0 0">Monitoring is active for this connection. Predictive alerts become available after a trained and validated model is integrated.</p></section>`;
+    versionNotice + `<div class="notice"><span class="live-dot"></span> ONLINE · Agent connected · last sample ${safe(new Date(sample.timestamp).toLocaleTimeString())} · ${sample.players} player${sample.players === 1 ? '' : 's'} online</div><div class="metrics-grid">${cards.map(([name, value, unit, caption]) => `<article class="metric"><label>${name}</label><strong>${value}<small>${unit}</small></strong><small>${safe(caption)}</small></article>`).join('')}</div><div class="two-columns"><section class="panel"><div class="panel-heading"><h2>CPU over time</h2><span class="tag green">REAL TELEMETRY</span></div><div class="telemetry-chart">${telemetryChart(data.telemetry, 'cpu')}</div></section><section class="panel"><div class="panel-heading"><h2>Connection details</h2></div><div class="panel-pad"><dl class="definition-list"><div><dt>Game</dt><dd>Minecraft Java</dd></div><div><dt>Platform</dt><dd>${safe(sample.platform || 'Paper')}</dd></div><div><dt>Configured version</dt><dd>${safe(server.minecraftVersion || 'Choose in Settings')}</dd></div><div><dt>Version reported by agent</dt><dd>${safe(sample.minecraftVersion || 'Awaiting a version report')}</dd></div><div><dt>Players</dt><dd>${sample.players}</dd></div><div><dt>Agent sample time</dt><dd>${safe(new Date(sample.timestamp).toLocaleString())}</dd></div><div><dt>Prediction model</dt><dd>Not connected</dd></div></dl></div></section></div><section class="panel panel-pad"><h2>A clear separation between observation and prediction.</h2><p style="margin:14px 0 0">Monitoring is active for this connection. Predictive alerts become available after a trained and validated model is integrated.</p></section>`;
 }
 
 export function telemetryChart(rows, metric) {
@@ -99,16 +117,28 @@ export function auditLog(entries, includeCleared = false) {
 }
 
 export function agentSetup(data, server) {
-  return title('Connect the Minecraft agent', 'Paper plugin · Java 17+ · HTTPS telemetry.', data.servers, server?.id) +
-    `<section class="panel panel-pad"><h2>From a running world to real telemetry.</h2><div class="step"><b>01 / Register a server connection</b><p>Choose “Connect server” to register your Minecraft server. You receive a server-specific key once. Store that key only in the plugin configuration on your server.</p></div><div class="step"><b>02 / Install the Paper plugin</b><p>Download the compiled plugin and place it in your Paper server’s <code>plugins</code> folder. The Java source is also available to study or build yourself with <code>mvn package</code>.</p><div class="actions"><a class="button primary small" href="igso-agent.jar" download>↓ Download plugin JAR</a><a class="button small" href="agent-source.zip" download>↓ Readable Java source</a></div></div><div class="step"><b>03 / Configure and start the agent</b><p>Start Paper once to create the plugin folder, stop it, and place your downloaded <code>config.yml</code> in <code>plugins/IGSOAgent</code>. Restart Paper. Every five seconds, the agent sends genuine readings.</p><pre class="code">endpoint: ${safe(agentEndpoint() || 'YOUR_INGESTION_ENDPOINT')}
-server-id: ${safe(server?.id || 'YOUR_SERVER_ID')}
-agent-key: YOUR_PRIVATE_AGENT_KEY
-interval-seconds: 5</pre></div><div class="step"><b>04 / Verify the connection</b><p>The Overview begins showing details after fresh telemetry arrives. A connection expires from the live view after 30 seconds without a new sample.</p></div><div class="step"><b>05 / Live players and console</b><p>Install the latest plugin. Set <code>player-tracking: true</code> to share positions privately. For commands, set <code>remote-console.enabled</code> to <code>true</code> and configure its <code>allowed-commands</code> list. Default roots: list, say, time, weather, difficulty, save-all. Restart Paper after editing. Commands run with console permissions.</p></div><p class="field-hint">A hosting address alone cannot expose Minecraft CPU or loaded entities. The authenticated agent is required. Vanilla, Forge and other games are not supported by this Paper plugin.</p></section>`;
+  const version = server?.minecraftVersion;
+  const release = releases[version];
+  const heading = title('Connect the Minecraft agent', 'Choose the Paper agent that matches your running server.', data.servers, server?.id);
+  if (!release) {
+    const action = server ? 'data-tab="Settings"' : 'id="first-server"';
+    return heading + `<section class="panel panel-pad"><h2>Choose a Minecraft version</h2>
+      <p>${server ? 'Set the version of this server in Settings.' : 'Register a Paper server and choose 1.20.1 or 26.3.'}</p>
+      <button class="button primary" ${action}>${server ? 'Open Settings' : 'Connect a server'}</button></section>`;
+  }
+  return heading + `<section class="panel panel-pad">
+    <h2>Paper ${safe(version)} setup</h2>
+    <div class="step"><b>1. Check your server</b><p>Use the agent built for Minecraft ${safe(version)}. This build needs Java ${release.java} or later. Changing the dashboard setting updates this guide and download.</p></div>
+    <div class="step"><b>2. Install the agent</b><p>Stop the server and place the JAR in its <code>plugins</code> folder. Keep one copy of IGSOAgent installed.</p>
+      <div class="actions"><a class="button primary small" href="${release.agent}" download>Download agent for ${safe(version)}</a><a class="button small" href="agent-source.zip" download>Java source</a></div></div>
+    <div class="step"><b>3. Add your configuration</b><p>Place the <code>config.yml</code> from registration in <code>plugins/IGSOAgent/</code>. Start the server and open Overview to check the first reading and reported version.</p></div>
+    <div class="step"><b>4. Choose optional permissions</b><p>The local agent configuration controls player tracking and remote console. Enable only the features you want on this server.</p></div>
+  </section>`;
 }
 
 export function settingsPage(data, server) {
   if (!server) return emptyDashboard(data.servers, server);
-  return title('Server policy', 'Simple settings, saved securely with your account.', data.servers, server?.id) + (!server ? emptyDashboard(data.servers, server) : `<form id="policy-form" class="panel panel-pad"><div class="field-grid"><div><label for="server-name">Server name</label><input id="server-name" name="name" maxlength="60" value="${safe(server.name)}" required></div><div><label for="threshold">Future alert confidence threshold (%)</label><input id="threshold" name="threshold" type="number" min="50" max="99" value="${server.threshold}" required></div></div><p class="field-hint">The threshold is stored for the future model integration. It does not produce predictions or execute actions in this version.</p><div class="actions" style="margin-top:25px"><button class="button primary small" type="submit">Save policy</button><button class="button small" type="button" id="rotate-key">Replace agent key</button></div><p class="field-hint">Replacing a key immediately disables the old one. Update the plugin configuration to reconnect.</p></form><section class="panel panel-pad danger-zone"><h2>Delete server connection</h2><p>Removes saved telemetry, player snapshot and command history, and disables the agent key. It does not delete your Minecraft world or stop the server.</p><button class="button danger" id="delete-server" type="button">Delete server</button></section>`);
+  return title('Server policy', 'Simple settings, saved securely with your account.', data.servers, server?.id) + (!server ? emptyDashboard(data.servers, server) : `<form id="policy-form" class="panel panel-pad"><div class="field-grid"><div>${versionField(server.minecraftVersion)}</div><div><label for="server-name">Server name</label><input id="server-name" name="name" maxlength="60" value="${safe(server.name)}" required></div><div><label for="threshold">Future alert confidence threshold (%)</label><input id="threshold" name="threshold" type="number" min="50" max="99" value="${server.threshold}" required></div></div><p class="field-hint">The threshold is stored for the future model integration. It does not produce predictions or execute actions in this version.</p><div class="actions" style="margin-top:25px"><button class="button primary small" type="submit">Save policy</button><button class="button small" type="button" id="rotate-key">Replace agent key</button></div><p class="field-hint">Replacing a key immediately disables the old one. Update the plugin configuration to reconnect.</p></form><section class="panel panel-pad danger-zone"><h2>Delete server connection</h2><p>Removes saved telemetry, player snapshot and command history, and disables the agent key. It does not delete your Minecraft world or stop the server.</p><button class="button danger" id="delete-server" type="button">Delete server</button></section>`);
 }
 
 export function livePlayers(data, server) {

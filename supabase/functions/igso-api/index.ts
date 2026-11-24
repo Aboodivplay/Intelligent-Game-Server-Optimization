@@ -6,7 +6,7 @@ const publicKey = Deno.env.get('SUPABASE_ANON_KEY')!;
 const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 const admin = createClient(projectUrl, serviceKey, { auth: { persistSession: false, autoRefreshToken: false } });
 const allowedOrigin = 'https://aboodivplay.github.io';
-const serverFields = 'id,name,threshold,manual_override,last_seen,tracking_enabled,console_enabled';
+const serverFields = 'id,name,threshold,manual_override,last_seen,tracking_enabled,console_enabled,minecraft_version';
 
 function reply(data: unknown, status = 200, origin = '') {
   return new Response(JSON.stringify(data), { status, headers: {
@@ -64,9 +64,16 @@ function checked(result: { error: unknown; data: any }) {
   return result.data;
 }
 
+// Older clients omit the target. Their saved connections can pick a release later.
+function checkMinecraftVersion(version: unknown) {
+  if (version !== undefined && version !== '1.20.1' && version !== '26.3') {
+    reject('Choose Minecraft 1.20.1 or 26.3.');
+  }
+}
+
 function presentServer(server: any) {
   return {
-    id: server.id, name: server.name, threshold: server.threshold,
+    id: server.id, name: server.name, threshold: server.threshold, minecraftVersion: server.minecraft_version,
     manualOverride: server.manual_override, trackingEnabled: server.tracking_enabled, consoleEnabled: server.console_enabled, lastSeen: server.last_seen,
     online: !!server.last_seen && Date.now() - Date.parse(server.last_seen) < 30000,
   };
@@ -82,6 +89,10 @@ function validateSample(sample: any) {
   }
   if (!Number.isInteger(sample.entities) || !Number.isInteger(sample.players)) reject('Invalid entity or player count.');
   for (const key of ['memoryUsedMb', 'memoryMaxMb']) if (sample[key] !== undefined && (!Number.isFinite(sample[key]) || sample[key] < 0 || sample[key] > 1000000000)) reject('Invalid memory reading.');
+  if (sample.minecraftVersion !== undefined &&
+      (typeof sample.minecraftVersion !== 'string' || !/^\d{1,3}\.\d{1,3}(?:\.\d{1,3})?$/.test(sample.minecraftVersion))) {
+    reject('Invalid reported Minecraft version.');
+  }
   if (sample.platform !== undefined && (typeof sample.platform !== 'string' || sample.platform.length > 120)) reject('Invalid platform.');
 }
 
@@ -110,7 +121,7 @@ Deno.serve(async request => {
         }
       }
       const timestamp = new Date().toISOString();
-      const payload = { timestamp, cpu: sample.cpu, memory: sample.memory, tps: sample.tps, entities: sample.entities, players: sample.players, memoryUsedMb: sample.memoryUsedMb, memoryMaxMb: sample.memoryMaxMb, platform: sample.platform || 'Paper' };
+      const payload = { timestamp, cpu: sample.cpu, memory: sample.memory, tps: sample.tps, entities: sample.entities, players: sample.players, memoryUsedMb: sample.memoryUsedMb, memoryMaxMb: sample.memoryMaxMb, platform: sample.platform || 'Paper', minecraftVersion: sample.minecraftVersion };
       checked(await admin.from('igso_telemetry').insert({ server_id: server.id, recorded_at: timestamp, payload }));
       checked(await admin.from('igso_servers').update({ last_seen: timestamp, player_snapshot: playerStates, tracking_enabled: sample.trackingEnabled === true, console_enabled: sample.consoleEnabled === true }).eq('id', server.id));
       // Acknowledgements belong only to this authenticated agent and server.
@@ -155,13 +166,14 @@ Deno.serve(async request => {
     }
     if (path === '/servers' && request.method === 'POST') {
       const input = await body(request);
+      checkMinecraftVersion(input.minecraftVersion);
       const name = typeof input.name === 'string' ? input.name.trim() : '';
       if (name.length < 2 || name.length > 60) reject('Use a name between 2 and 60 characters.');
       const existing = await userClient.from('igso_servers').select('id', { count: 'exact', head: true });
       if (existing.error) reject('Could not verify server limit.', 500);
       if ((existing.count || 0) >= 10) reject('Limit of ten server connections reached.');
       const key = newKey();
-      const server = checked(await admin.from('igso_servers').insert({ owner_id: userId, name, agent_key_hash: await hash(key) }).select(serverFields).single());
+      const server = checked(await admin.from('igso_servers').insert({ owner_id: userId, name, minecraft_version: input.minecraftVersion, agent_key_hash: await hash(key) }).select(serverFields).single());
       await recordAudit(userId, 'Server registered', name);
       return reply({ server: presentServer(server), agentKey: key }, 201, origin);
     }
@@ -222,12 +234,22 @@ Deno.serve(async request => {
       }
       if (match[2] || request.method !== 'PATCH') reject('Method not allowed.', 405);
       const input = await body(request);
+      checkMinecraftVersion(input.minecraftVersion);
       const name = input.name === undefined ? server.name : input.name;
       const threshold = input.threshold === undefined ? server.threshold : input.threshold;
       const override = input.manualOverride === undefined ? server.manual_override : input.manualOverride;
       if (typeof name !== 'string' || name.trim().length < 2 || name.trim().length > 60 || !Number.isInteger(threshold) || threshold < 50 || threshold > 99 || typeof override !== 'boolean') reject('Invalid server policy.');
-      checked(await userClient.from('igso_servers').update({ name: name.trim(), threshold, manual_override: override }).eq('id', server.id));
-      await recordAudit(userId, 'Policy updated', name.trim());
+      // Update only supplied fields so a concurrent override cannot undo a version change.
+      const changes: Record<string, unknown> = {};
+      if (input.name !== undefined) changes.name = name.trim();
+      if (input.threshold !== undefined) changes.threshold = threshold;
+      if (input.manualOverride !== undefined) changes.manual_override = override;
+      if (input.minecraftVersion !== undefined) changes.minecraft_version = input.minecraftVersion;
+      if (!Object.keys(changes).length) reject('Choose a policy setting to update.');
+      checked(await userClient.from('igso_servers').update(changes).eq('id', server.id));
+      const changedVersion = input.minecraftVersion && input.minecraftVersion !== server.minecraft_version;
+      await recordAudit(userId, changedVersion ? 'Minecraft version changed' : 'Policy updated',
+        changedVersion ? name.trim() + ' · ' + input.minecraftVersion : name.trim());
       return reply({ saved: true }, 200, origin);
     }
     if (path === '/dashboard' && request.method === 'GET') {

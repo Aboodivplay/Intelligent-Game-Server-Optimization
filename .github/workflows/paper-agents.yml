@@ -34,8 +34,3 @@ jobs:
         with:
           name: igso-agent-${{ matrix.minecraft }}
           path: agent/target/igso-agent-1.1.0.jar
-      - name: Export the public agent JAR for the website release
-        run: |
-          sha256sum agent/target/igso-agent-1.1.0.jar
-          base64 -w 0 agent/target/igso-agent-1.1.0.jar
-          echo

@@ -36,3 +36,27 @@ jobs:
         with:
           name: igso-${{ matrix.loader }}-${{ matrix.game }}
           path: dist/*.jar
+
+  package:
+    name: Prepare verified dashboard downloads
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: build
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: igso-*
+          path: downloads
+          merge-multiple: true
+      - name: Record the tested JARs for the release commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          for file in downloads/*.jar; do
+            sha=$(jq -n --arg content "$(base64 -w0 "$file")" '{content:$content,encoding:"base64"}' |
+              gh api --method POST "repos/$GITHUB_REPOSITORY/git/blobs" --input - --jq '.sha')
+            echo "mods/$(basename "$file") $sha"
+          done

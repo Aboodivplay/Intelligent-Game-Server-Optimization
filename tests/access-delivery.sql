@@ -83,6 +83,9 @@ begin
   update public.igso_servers set last_seen=now()-interval '6 seconds' where id=server_a;
   visible := public.igso_observer_view(member_b,server_a);
   perform pg_temp.require(visible->'online'='false'::jsonb and visible->'players'='[]'::jsonb, 'stale at three intervals');
+  update public.igso_servers set loader='Paper' where id=server_a;
+  perform pg_temp.require((select last_seen is null and sample_interval is null and not tracking_enabled and not console_enabled
+    from public.igso_servers where id=server_a), 'switching loader clears the previous heartbeat and controls');
 
   execute 'reset role';
   perform set_config('request.jwt.claims',json_build_object('sub',member_b,'session_id',member_session,'aal','aal1','role','authenticated')::text,true);

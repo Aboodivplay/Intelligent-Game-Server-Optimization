@@ -213,7 +213,10 @@ Deno.serve(async request => {
       const timestamp = new Date().toISOString();
       const payload = { timestamp, cpu: sample.cpu, memory: sample.memory, tps: sample.tps, entities: sample.entities, players: sample.players, memoryUsedMb: sample.memoryUsedMb, memoryMaxMb: sample.memoryMaxMb, platform: sample.platform || 'Paper', minecraftVersion: sample.minecraftVersion };
       checked(await admin.from('igso_telemetry').insert({ server_id: server.id, recorded_at: timestamp, payload }));
-      checked(await admin.from('igso_servers').update({ last_seen: timestamp, player_snapshot: playerStates, tracking_enabled: sample.trackingEnabled === true, console_enabled: sample.consoleEnabled === true }).eq('id', server.id));
+      const heartbeat = checked(await admin.from('igso_servers')
+        .update({ last_seen: timestamp, player_snapshot: playerStates, tracking_enabled: sample.trackingEnabled === true, console_enabled: sample.consoleEnabled === true })
+        .eq('id', server.id).eq('loader','Paper').eq('agent_key_hash',credential).select('id').maybeSingle());
+      if (!heartbeat) reject('The agent configuration changed. Check the server settings.',409);
       // Acknowledgements belong only to this authenticated agent and server.
       for (const result of Array.isArray(sample.commandResults) ? sample.commandResults.slice(0,10) : []) {
         if (!/^[a-f0-9-]{36}$/.test(result.id || '') || !['completed','rejected'].includes(result.status) || typeof result.output !== 'string') continue;

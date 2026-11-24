@@ -5,6 +5,7 @@ from pathlib import Path
 import shutil
 import subprocess
 import tempfile
+import urllib.error
 import urllib.request
 import zipfile
 
@@ -26,7 +27,20 @@ url = (f"{forge_maven}/{forge_build}/forge-{forge_build}-mdk.zip" if forge else
 with tempfile.TemporaryDirectory(prefix="igso-build-") as temp:
     root = Path(temp)
     bundle = root / "kit.zip"
-    urllib.request.urlretrieve(url, bundle)
+    # Forge also publishes the kit through its explicit releases repository.
+    urls = [url]
+    if forge:
+        urls.append(url.replace("maven.minecraftforge.net/", "maven.minecraftforge.net/releases/"))
+    for address in urls:
+        try:
+            request = urllib.request.Request(address, headers={"User-Agent": "IGSO-Mod-Build/1.0"})
+            with urllib.request.urlopen(request, timeout=45) as response, bundle.open("wb") as out:
+                shutil.copyfileobj(response, out)
+            break
+        except urllib.error.HTTPError as error:
+            print(f"Development kit download returned HTTP {error.code} at {address}", flush=True)
+            if address == urls[-1]:
+                raise
     with zipfile.ZipFile(bundle) as archive:
         for item in archive.infolist():
             parts = Path(item.filename).parts

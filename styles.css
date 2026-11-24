@@ -199,33 +199,34 @@ dialog { border: 1px solid #3a5261; border-radius: 10px; background: #101a25; co
 .authenticator-qr { display: block; width: min(12rem, 100%); background: white; margin: 1rem auto; }
 .setup-key { overflow-wrap: anywhere; user-select: all; }
 
-/* The island and its loose blocks share a coordinate system at every screen size. */
-.world {
-  position: relative;
-  display: grid;
-  justify-items: center;
-  align-content: center;
-  margin: 0;
-  min-width: 0;
-  background: radial-gradient(ellipse at 56% 47%, #b16a351e, transparent 63%);
+/* The extra image width keeps both edges covered throughout the pan. */
+.world { position: relative; min-width: 0; margin: 0; }
+.world-frame {
+  --pan-distance: 18px;
+  position: relative; overflow: hidden; aspect-ratio: 1.48;
+  border: 3px solid #39433a; box-shadow: 0 10px 30px #080c1166;
+  background: #39433a;
 }
-.forest-stage { position: relative; width: min(100%, 540px); aspect-ratio: 1.16; isolation: isolate; }
-.forest-island { position: absolute; height: 84%; left: 50%; top: 5%; transform: translateX(-50%); }
-.forest-block { position: absolute; width: 10%; height: auto; }
-.block-copper { left: 9%; top: 61%; }
-.block-leaves { right: 9%; top: 26%; width: 9%; }
-.block-weathered { right: 12%; bottom: 13%; width: 7%; }
-.forest-floor {
-  position: absolute; inset: 60% 6% 2%; border-radius: 50%;
-  background: radial-gradient(ellipse, #0b0e0e 5%, #95ab7047 28%, transparent 65%);
-  border: 1px solid #a2b98132;
+.home-panorama {
+  position: absolute; inset: 0 auto 0 calc(0px - var(--pan-distance));
+  width: calc(100% + 2 * var(--pan-distance)); max-width: none; height: 100%;
+  object-fit: cover; object-position: 46% center;
 }
-.world figcaption { display: flex; align-items: center; gap: 10px; font-size: .75rem; color: #a6b3b1; }
+.block-slots {
+  position: absolute; right: 12px; bottom: 12px; display: flex; gap: 3px;
+  padding: 4px; border: 2px solid #171917; background: #232624db;
+}
+.block-slots img {
+  width: clamp(34px, 3.6vw, 50px); aspect-ratio: 1; padding: 4px;
+  border: 2px solid; border-color: #323432 #c4c3b8 #c4c3b8 #323432;
+  background: #777970; image-rendering: pixelated;
+}
+.world figcaption { display: flex; align-items: center; gap: 10px; margin-top: 12px; font-size: .75rem; color: #a6b3b1; }
 .world figcaption span { color: #ecc58a; padding-right: 10px; border-right: 1px solid #56605a; }
 .auth-block { display: block; width: 92px; height: auto; margin: 26px 0; }
 .supported-game {
   position: relative; display: flex; width: 100%; align-items: center; gap: 22px; text-align: left;
-  padding: 28px; color: var(--text); background: linear-gradient(100deg,#1a2a23ee,#131d19f5),url('assets/minecraft/oak_planks.png') 0 0 / 64px;
+  padding: 28px; color: var(--text); background: linear-gradient(100deg,#1a2a23ee,#131d19f5),url('assets/minecraft/oak_planks.png?v=vanilla') 0 0 / 64px;
   border: 1px solid #485c49; border-radius: 5px;
 }
 .supported-game strong, .supported-game small { display: block; }
@@ -240,19 +241,20 @@ button.supported-game:hover, button.supported-game:focus-visible { border-color:
 .milestone-list details[open] summary { color: #b8e2ca; }
 .milestone-list p { max-width: 78ch; margin: 0 0 20px 22px; line-height: 1.7; }
 @media (prefers-reduced-motion: no-preference) {
-  .forest-island { animation: island-hover 5s ease-in-out infinite alternate; }
-  .forest-block { animation: block-hover 3.5s ease-in-out infinite alternate; }
-  .block-leaves { animation-delay: -2.1s; }
-  .block-weathered { animation-delay: -1s; animation-duration: 4.5s; }
+  .home-panorama { animation: panorama-sweep 24s ease-in-out infinite; }
+  .block-slots img { animation: inventory-bob 3.6s ease-in-out infinite; }
+  .block-slots img:nth-child(2) { animation-delay: -1.2s; }
+  .block-slots img:nth-child(3) { animation-delay: -2.4s; }
   .world.offscreen-motion img, .motion-paused .world img { animation-play-state: paused; }
 }
-@keyframes island-hover {
-  from { transform: translate3d(-50%, 4px, 0); }
-  to { transform: translate3d(-50%, -8px, 0); }
+/* Each half is one pass. The end of a cycle shares its position with the start. */
+@keyframes panorama-sweep {
+  0%, 100% { transform: translate3d(var(--pan-distance), 0, 0); }
+  50% { transform: translate3d(calc(0px - var(--pan-distance)), 0, 0); }
 }
-@keyframes block-hover {
-  from { transform: translate3d(-2px, 7px, 0) rotate(-4deg); }
-  to { transform: translate3d(3px, -11px, 0) rotate(4deg); }
+@keyframes inventory-bob {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-3px); }
 }
 @media (max-width: 820px) {
   .world { width: min(100%, 490px); margin: 22px auto 0; }

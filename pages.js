@@ -12,15 +12,15 @@ export function footer() {
   return `<footer><div>${brand()}<p>A graduation project at the University of Petra.<br>Built for server administrators. Starting with Minecraft.</p></div><div><a href="#project">Project & scope</a><a href="#development">Under development</a><a href="#login" data-open="login">Administrator login</a></div><small>Independent academic project. Not affiliated with Mojang or Microsoft.<br>© ${new Date().getFullYear()} Intelligent Game Server Optimization</small></footer>`;
 }
 
-function forestScene() {
-  // Separate sprites let the browser move each block without redrawing the forest.
+function minecraftScene() {
   return `<figure class="world">
-    <div class="forest-stage" aria-hidden="true">
-      <div class="forest-floor"></div>
-      <img class="forest-island" src="assets/minecraft/poplar-camp.webp" alt="" fetchpriority="high">
-      <img class="forest-block block-copper" src="assets/minecraft/cut-copper.webp" alt="">
-      <img class="forest-block block-leaves" src="assets/minecraft/poplar-leaves.webp" alt="">
-      <img class="forest-block block-weathered" src="assets/minecraft/weathered-copper.webp" alt="">
+    <div class="world-frame">
+      <img class="home-panorama" src="assets/minecraft/panorama-26-3.webp" alt="A white wool tent and a camp chest in the Dappled Forest" fetchpriority="high">
+      <div class="block-slots" aria-hidden="true">
+        <img src="assets/minecraft/crafting-table.png" alt="">
+        <img src="assets/minecraft/tnt.png" alt="">
+        <img src="assets/minecraft/diamond-ore.png" alt="">
+      </div>
     </div>
     <figcaption><span>Dappled Forest</span> Minecraft Java 26.3</figcaption>
   </figure>`;
@@ -45,7 +45,7 @@ function developmentSection() {
 
 export function landing(user) {
   return `${header(user)}<main id="content">
-    <section class="hero section-width"><div class="hero-copy"><div class="eyebrow"><span class="tiny-square"></span> MINECRAFT SERVER MONITORING</div><h1>Inside your<br><span>Minecraft server.</span></h1><p>See how CPU load, memory and tick rate change as players join and your world grows. Connect your Paper server to start recording.</p><div class="hero-actions"><button class="button primary" data-open="${user ? 'games' : 'signup'}">Start monitoring <span>↗</span></button><a class="text-link" href="#how-it-works">See how it works <span>↓</span></a></div></div>${forestScene()}</section>
+    <section class="hero section-width"><div class="hero-copy"><div class="eyebrow"><span class="tiny-square"></span> MINECRAFT SERVER MONITORING</div><h1>Inside your<br><span>Minecraft server.</span></h1><p>See how CPU load, memory and tick rate change as players join and your world grows. Connect your Paper server to start recording.</p><div class="hero-actions"><button class="button primary" data-open="${user ? 'games' : 'signup'}">Start monitoring <span>↗</span></button><a class="text-link" href="#how-it-works">See how it works <span>↓</span></a></div></div>${minecraftScene()}</section>
     <section class="section-width section-block" id="capabilities"><div class="section-heading reveal"><div><div class="eyebrow">Monitoring</div><h2>When the world slows down,<br>find out what changed.</h2></div><p>Follow hardware demand alongside what is happening in-game. Spend less time switching between tools and more time understanding the cause.</p></div><div class="feature-grid"><article class="feature feature-large reveal"><div class="feature-top"><span class="number">01</span><span class="tag green">AVAILABLE WITH AGENT</span></div><div class="signal-art" aria-hidden="true"><div class="signal-line"></div><div class="signal-bars">${Array.from({ length: 28 }, (_, i) => `<i style="--bar:${18 + (i * 17 % 65)}%;--delay:${i * .07}s"></i>`).join('')}</div><span>HARDWARE + GAME STATE</span></div><h3>The signals that matter.</h3><p>Track CPU load, Java heap, tick rate, loaded entities and online players together. Review recent history when a busy area, new build or plugin changes server performance.</p></article><article class="feature reveal"><div class="feature-top"><span class="number">02</span><span class="tag purple">RESEARCH TARGET</span></div><div class="forecast-art" aria-hidden="true"><span></span><span></span><span></span><b>5<small>MINUTES AHEAD</small></b></div><h3>Working toward earlier warnings.</h3><p>The next stage of the project uses LSTM time-series research to study patterns before instability. The model targets a five-minute warning. Training and validation are still in progress.</p></article><article class="feature reveal"><div class="feature-top"><span class="number">03</span><span class="tag">ADMINISTRATOR CONTROL</span></div><div class="control-art" aria-hidden="true"><span>OBSERVE</span><i></i><span>REVIEW</span><i></i><span>DECIDE</span></div><h3>Control stays with you.</h3><p>Your workspace is for observation and informed decisions. Monitoring does not delete entities, restart the server or run commands. Automated actions are planned as a separate, permission-controlled integration.</p></article></div></section>
     <section class="architecture-section" id="how-it-works"><div class="section-width section-block"><div class="section-heading reveal"><div><div class="eyebrow">Architecture</div><h2>From your Minecraft server<br>to your control room.</h2></div><p>The monitoring agent runs beside the game.<br>The dashboard gives those signals a place to make sense.</p></div><div class="pipeline reveal"><article><span>01 / EDGE</span><div class="pipeline-symbol">▣</div><h3>Minecraft agent</h3><p>A Paper plugin reads game state and hardware signals without changing core game files.</p></article><div class="pipeline-arrow">→</div><article><span>02 / INGEST</span><div class="pipeline-symbol">⌁</div><h3>Authenticated API</h3><p>A server-specific key sends telemetry over HTTPS. Each account sees only its own servers.</p></article><div class="pipeline-arrow">→</div><article><span>03 / ANALYZE</span><div class="pipeline-symbol">◇</div><h3>Prediction research</h3><p>The planned Python/LSTM engine prepares windows and evaluates failure probability.</p></article><div class="pipeline-arrow">→</div><article><span>04 / UNDERSTAND</span><div class="pipeline-symbol">◫</div><h3>Your control room</h3><p>Review measured values and recent history. See immediately when an agent is connected, waiting or offline.</p></article></div><div class="scope-note reveal"><span>PROJECT STATUS</span><p>Available now: account access, Paper agent connections, telemetry history and exports. In development: validated LSTM predictions and an audited remediation workflow. Minecraft Java on Paper is the current supported platform.</p></div></div></section>
     <section class="section-width section-block" id="games"><div class="section-heading reveal"><div><div class="eyebrow">Supported game</div><h2>Minecraft Java Edition</h2></div><p>Choose a version for each server when you connect it.</p></div>${gameCards(false)}<div class="center-actions"><button class="button primary" data-open="${user ? 'games' : 'signup'}">${user ? 'Choose a game' : 'Create your account'} ↗</button></div></section>
@@ -59,7 +59,7 @@ export function gameCards(interactive) {
   const tag = interactive ? 'button' : 'article';
   const action = interactive ? 'type="button" data-game="minecraft"' : '';
   return `<${tag} class="supported-game" ${action}>
-    <img src="assets/minecraft/grass-block.png" alt="" width="56" height="58" loading="lazy">
+    <img src="assets/minecraft/grass-block.png?v=vanilla" alt="" width="56" height="58" loading="lazy">
     <span><strong>Minecraft</strong><small>Java Edition · Paper 1.20.1 and 26.3</small></span>
     ${interactive ? '<span class="game-arrow" aria-hidden="true">↗</span>' : ''}
   </${tag}>`;
@@ -76,7 +76,7 @@ function authLayout(title, description, body) {
       ${brand()}
       <div><h1>Minecraft<br><span>server monitoring.</span></h1>
         <p>Track server performance and investigate slowdowns.</p>
-        <img class="auth-block" src="assets/minecraft/grass-block.png" alt="" width="92" height="96">
+        <img class="auth-block" src="assets/minecraft/grass-block.png?v=vanilla" alt="" width="92" height="96">
       </div>
       <a class="text-link" href="#home">← Back to the project</a>
     </section>

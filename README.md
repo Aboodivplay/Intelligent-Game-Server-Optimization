@@ -16,7 +16,7 @@ To enable two-step login, sign in, open **Account security** on the game selecti
 
 Open **Minecraft → Remediation → Account audit log** to review activity. **Clear history** hides the actions you have seen. **Show cleared entries** displays retained records again. New events appear in the default view.
 
-See the [GP2 design comparison](docs/gp2-alignment.md) for the implemented features and outstanding evaluation targets. The [Minecraft artwork credits](assets/minecraft/CREDITS.md) identify the resource pack and font.
+See the [GP2 design comparison](docs/gp2-alignment.md) for the implemented features and outstanding evaluation targets. The [Minecraft artwork credits](assets/minecraft/CREDITS.md) identify the game versions, artwork and font.
 
 ## Code guide
 

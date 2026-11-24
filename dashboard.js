@@ -1,5 +1,5 @@
 import { escapeHtml as safe, agentEndpoint } from './api.js?v=accounts-20261120';
-import { brand } from './pages.js?v=forest-20261124';
+import { brand } from './pages.js?v=vanilla-20261124';
 
 export const dashboardTabs = ['Overview', 'Live players', 'Console', 'Telemetry history', 'Predictions', 'Remediation', 'Agent setup', 'Settings'];
 
@@ -7,7 +7,7 @@ export const dashboardTabs = ['Overview', 'Live players', 'Console', 'Telemetry 
 const navigationItems = ['grass-block', 'name_tag', 'redstone', 'book', 'ender_pearl', 'iron_pickaxe', 'repeater', 'comparator'];
 
 function inventorySlot(item) {
-  return `<span class="inventory-slot" aria-hidden="true"><img src="assets/minecraft/${item}.png" alt="" width="24" height="24"></span>`;
+  return `<span class="inventory-slot" aria-hidden="true"><img src="assets/minecraft/${item}.png?v=vanilla" alt="" width="24" height="24"></span>`;
 }
 
 const releases = {
@@ -48,8 +48,7 @@ function title(titleText, subtitle, servers = [], selectedId = '') {
 }
 
 export function emptyDashboard(servers, selected) {
-  const icon = selected?.minecraftVersion === '1.20.1' ? 'cherry-grove.webp' : 'grass-block.png';
-  return title('Server overview', 'Server readings appear after your Minecraft agent connects.', servers, selected?.id) + `${selected ? `<div class="notice amber"><b>OFFLINE / NO RECENT HEARTBEAT</b> · ${selected.lastSeen ? safe(new Date(selected.lastSeen).toLocaleString()) : "Agent has not connected yet"}. Check the server or agent connection.</div>` : ""}<section class="empty-state"><img class="connection-block" src="assets/minecraft/${icon}" width="64" height="67" alt=""><div class="eyebrow">${selected ? 'WAITING FOR REAL TELEMETRY' : 'NO SERVER CONNECTED'}</div><h2>${selected ? safe(selected.name) + ' is waiting for its agent.' : 'Connect your first Minecraft server.'}</h2><p>${selected ? 'The connection has been registered, but no fresh server telemetry is available. Install the Paper plugin using your server’s configuration, then return here.' : 'Install the lightweight Paper plugin, connect it with a server-specific key, and your real server details will appear here.'}</p><button class="button primary" ${selected ? 'data-tab="Agent setup"' : 'id="first-server"'}>${selected ? 'View agent setup' : 'Set up a connection'} ↗</button><p class="field-hint">No CPU, memory, tick rate, entity count or prediction is shown without a fresh sample from your server.</p></section>`;
+  return title('Server overview', 'Server readings appear after your Minecraft agent connects.', servers, selected?.id) + `${selected ? `<div class="notice amber"><b>OFFLINE / NO RECENT HEARTBEAT</b> · ${selected.lastSeen ? safe(new Date(selected.lastSeen).toLocaleString()) : "Agent has not connected yet"}. Check the server or agent connection.</div>` : ""}<section class="empty-state"><img class="connection-block" src="assets/minecraft/grass-block.png?v=vanilla" width="64" height="67" alt=""><div class="eyebrow">${selected ? 'WAITING FOR REAL TELEMETRY' : 'NO SERVER CONNECTED'}</div><h2>${selected ? safe(selected.name) + ' is waiting for its agent.' : 'Connect your first Minecraft server.'}</h2><p>${selected ? 'The connection has been registered, but no fresh server telemetry is available. Install the Paper plugin using your server’s configuration, then return here.' : 'Install the lightweight Paper plugin, connect it with a server-specific key, and your real server details will appear here.'}</p><button class="button primary" ${selected ? 'data-tab="Agent setup"' : 'id="first-server"'}>${selected ? 'View agent setup' : 'Set up a connection'} ↗</button><p class="field-hint">No CPU, memory, tick rate, entity count or prediction is shown without a fresh sample from your server.</p></section>`;
 }
 
 export function overview(data, server) {

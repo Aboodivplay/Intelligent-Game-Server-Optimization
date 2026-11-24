@@ -1,8 +1,8 @@
 import { showAccountSecurity } from './account-security.js?v=accounts-20261120';
 import { api, openApp, escapeHtml as safe, download, agentEndpoint } from './api.js?v=accounts-20261120';
 import { readEmailAction, sendPasswordReset, changePassword, resendConfirmation, verifyAuthenticator, clearSession } from './session.js?v=accounts-20261120';
-import { landing, authPage, gameSelection, verificationPage, passwordChangePage } from './pages.js?v=forest-20261124';
-import { versionField, dashboardShell, overview, history, predictions, remediation, agentSetup, settingsPage, livePlayers, consolePage } from './dashboard.js?v=forest-20261124';
+import { landing, authPage, gameSelection, verificationPage, passwordChangePage } from './pages.js?v=vanilla-20261124';
+import { versionField, dashboardShell, overview, history, predictions, remediation, agentSetup, settingsPage, livePlayers, consolePage } from './dashboard.js?v=vanilla-20261124';
 
 // Only navigation and current UI state live here. Server records come from the API.
 let user = null;
@@ -179,8 +179,16 @@ function showWorkspaceError(error) {
     location.hash = 'login';
     toast(error.code === 'mfa_required' ? 'Sign in again to verify your authenticator.' : 'Your session expired. Please log in again.');
   } else {
-    app.innerHTML = dashboardShell(user, activeTab, `<section class="empty-state"><h2>We cannot reach the backend.</h2><p>${safe(error.message)}. Live server details are hidden until the connection recovers.</p><button class="button primary" id="retry">Try again</button></section>`);
-    bindControls();
+    const content = `<section class="empty-state"><h2>We cannot reach the backend.</h2><p>${safe(error.message)}. Live server details are hidden until the connection recovers.</p><button class="button primary" id="retry">Try again</button></section>`;
+    const main = app.querySelector('.workspace-main');
+    if (main) {
+      main.innerHTML = content;
+      bindControls(main);
+    } else {
+      app.innerHTML = dashboardShell(user, activeTab, content, selectedServer()?.minecraftVersion);
+      animateSections();
+      bindControls();
+    }
   }
 }
 
@@ -424,7 +432,13 @@ function bindControls(scope = document) {
   });
   scope.querySelector('#connect-server')?.addEventListener('click', connectServer);
   scope.querySelector('#first-server')?.addEventListener('click', connectServer);
-  scope.querySelector('#retry')?.addEventListener('click', renderRoute);
+  scope.querySelector('#retry')?.addEventListener('click', async () => {
+    const version = routeVersion;
+    try {
+      await loadDashboard();
+      if (version === routeVersion) drawDashboard();
+    } catch (error) { if (version === routeVersion) showWorkspaceError(error); }
+  });
   scope.querySelectorAll('[data-metric]').forEach(button => button.onclick = () => { chartMetric = button.dataset.metric; drawDashboard(); });
   scope.querySelectorAll('[data-export]').forEach(button => button.onclick = () => exportTelemetry(button.dataset.export));
   scope.querySelector('#clear-audit')?.addEventListener('click', confirmClearAudit);

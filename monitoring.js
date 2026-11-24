@@ -21,8 +21,13 @@ export function modGuide(server) {
     <ol><li>Stop the dedicated server. Place <a href="mods/${safe(jar)}" download>${safe(jar)}</a> in its <code>mods/</code> directory.
     ${loader==='Fabric' ? 'Install Fabric API for the same Minecraft version alongside it.' : ''}</li>
     <li>Place the private <code>igso.properties</code> file from registration in <code>config/</code>.
-    Set <code>interval-seconds</code> between 1 and 5. The default is 2.</li>
+    Switching from Paper? Use the server ID and agent key from your existing configuration in this properties file.
+    If you have lost the key, Settings lets you replace it and download the new configuration.</li>
     <li>Start the server. Overview shows CPU, heap, TPS, MSPT, entities and players after the first sample.</li></ol>
+    <details><summary>Agent configuration format</summary><pre class="code">endpoint=${safe(agentEndpoint())}
+server-id=${safe(server.id)}
+agent-key=YOUR_PRIVATE_AGENT_KEY
+interval-seconds=2</pre><p>Sampling accepts 1 to 5 seconds.</p></details>
     <h3>Local SQLite recording</h3><p>To keep a local copy, extract the collector in the server directory. Set the agent endpoint in the properties file to <code>http://127.0.0.1:8765/telemetry</code>.
     Run this command before starting Minecraft to forward stored samples to this dashboard.</p>
     <pre class="code">python collector/collector.py --config config/igso.properties --upstream ${safe(agentEndpoint())}</pre>

@@ -29,6 +29,10 @@ The Forge and Fabric agents capture six aggregate game and host signals. Source 
 
 ## Acceptance evidence still needed
 
+The automated outage check restarted the relay halfway through a 60-second outage. All 30 samples reached the test receiver in source order, and the queue drained 1.11 seconds after recovery. Browser checks exercised creating a code, using it once in a separate session, changing visible sections, revoking access and downloading each loader/version pair. [Workspace test run](https://github.com/Aboodivplay/Intelligent-Game-Server-Optimization/actions/runs/45463715141)
+
+For the live demonstration, connect a player to the dedicated server and compare its version and player count with Overview. Check consecutive source timestamps and MSPT in Telemetry history. Stop the server and record the first dashboard refresh that shows it offline after three sampling intervals.
+
 The documents call for at most five percentage points of additional host CPU, at least 95% of updates within two seconds, and at least 80% event-level precision and recall at five minutes. They also specify an eight-hour run, a 60-second outage, recovery within 30 seconds, stale status after three sampling intervals, and reaching an alert or action in at most two interactions. These remain evaluation targets. The downloadable baseline and a working website do not establish these measurements.
 
 The remaining checks include privacy of player-level data under live conditions and an incident trace linking a recommendation, the operator’s decision and the measured outcome. The generated Paper configuration currently enables private player tracking. Record the intended consent and collection defaults when validating the final agent.

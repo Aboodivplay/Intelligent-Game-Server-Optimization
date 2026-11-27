@@ -1,10 +1,10 @@
-import { manageInvites, bindShared, sharedPage } from './sharing.js';
-import { agentConfig, loaderField } from './monitoring.js';
+import { manageInvites, bindShared, sharedPage } from './sharing.js?v=releases-20261128';
+import { agentConfig, loaderField } from './monitoring.js?v=releases-20261128';
 import { showAccountSecurity } from './account-security.js?v=accounts-20261120';
 import { api, openApp, escapeHtml as safe, download, agentEndpoint } from './api.js?v=accounts-20261120';
 import { readEmailAction, sendPasswordReset, changePassword, resendConfirmation, verifyAuthenticator, clearSession } from './session.js?v=accounts-20261120';
-import { landing, authPage, gameSelection, verificationPage, passwordChangePage } from './pages.js?v=access-20261124';
-import { versionField, dashboardShell, overview, history, predictions, remediation, agentSetup, settingsPage, livePlayers, consolePage } from './dashboard.js?v=access-20261124';
+import { landing, authPage, gameSelection, verificationPage, passwordChangePage } from './pages.js?v=releases-20261128';
+import { versionField, dashboardShell, overview, history, predictions, remediation, agentSetup, settingsPage, livePlayers } from './dashboard.js?v=releases-20261128';
 
 // Only navigation and current UI state live here. Server records come from the API.
 let user = null;
@@ -71,7 +71,6 @@ function drawDashboard() {
   const server = selectedServer();
   const renderTab = {
     'Live players': () => livePlayers(dashboard, server),
-    'Console': () => consolePage(dashboard, server),
     'Overview': () => overview(dashboard, server),
     'Telemetry history': () => history(dashboard, server, chartMetric),
     'Predictions': () => predictions(dashboard, server),
@@ -498,21 +497,12 @@ function bindControls(scope = document) {
   });
   scope.querySelector('#delete-server')?.addEventListener('click', () => {
     const server=selectedServer();
-    showModal(`<h2>Delete ${safe(server.name)}?</h2><p>Permanently removes its saved telemetry, command history and agent key. Your Minecraft world remains on your server.</p><form id="delete-form"><label for="delete-name">Type the exact server name</label><input id="delete-name" autocomplete="off" required><div class="actions"><button class="button" type="button" data-close>Cancel</button><button class="button danger" type="submit">Permanently delete connection</button></div></form>`);
+    showModal(`<h2>Delete ${safe(server.name)}?</h2><p>Permanently removes its saved telemetry, player access and agent key. Your Minecraft world remains on your server.</p><form id="delete-form"><label for="delete-name">Type the exact server name</label><input id="delete-name" autocomplete="off" required><div class="actions"><button class="button" type="button" data-close>Cancel</button><button class="button danger" type="submit">Permanently delete connection</button></div></form>`);
     document.querySelector('#delete-form').onsubmit=async event=>{
       event.preventDefault();const name=document.querySelector('#delete-name').value;
       if(name!==server.name)return toast('The server name does not match.');
       event.currentTarget.querySelector('[type=submit]').disabled=true;
       try{await api('/servers/'+server.id,{method:'DELETE',body:JSON.stringify({confirmName:name})});modal.close();serverId='';await loadDashboard();activeTab='Overview';drawDashboard();toast('Server connection deleted.');}
-      catch(error){toast(error.message);modal.close();}
-    };
-  });
-  scope.querySelector('#command-form')?.addEventListener('submit',event=>{
-    event.preventDefault();const command=document.querySelector('#command-input').value.trim();
-    showModal(`<h2>Run this server command?</h2><pre class="code">${safe(command)}</pre><p>It will run on ${safe(selectedServer().name)}. Review its effect before sending.</p><div class="actions"><button class="button" data-close>Cancel</button><button class="button primary" id="send-command">Send to Minecraft</button></div>`);
-    document.querySelector('#send-command').onclick=async event=>{
-      event.currentTarget.disabled=true;
-      try{await api('/servers/'+serverId+'/commands',{method:'POST',body:JSON.stringify({command})});modal.close();await loadDashboard();drawDashboard();toast('Command queued. Waiting for the agent.');}
       catch(error){toast(error.message);modal.close();}
     };
   });

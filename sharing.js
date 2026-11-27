@@ -1,6 +1,6 @@
 import { api, escapeHtml as safe } from './api.js?v=accounts-20261120';
 
-const sections = { overview: 'Overview', history: 'Telemetry history', players: 'Player names and activity' };
+const sections = { overview: 'Overview', history: 'Telemetry history', players: 'Online player count' };
 
 function sectionChoices(selected = ['overview']) {
   return Object.entries(sections).map(([key, label]) =>
@@ -74,7 +74,7 @@ function sharedView(view) {
   return `<h2>${safe(view.name)}</h2><p>Read-only observer · ${view.online ? 'Online' : 'Offline'}</p>
     ${view.scopes.includes('overview') ? `<h3>Overview</h3>${sample ? `<p>Last sample · ${safe(new Date(sample.timestamp).toLocaleString())}</p><dl class="definition-list">${metrics}</dl>` : '<p>No samples received.</p>'}` : ''}
     ${view.scopes.includes('history') ? `<h3>Telemetry history</h3><div class="table-scroll"><table><thead><tr><th>Time</th><th>CPU</th><th>Heap</th><th>TPS</th><th>MSPT</th></tr></thead><tbody>${history || '<tr><td colspan="5">No samples received.</td></tr>'}</tbody></table></div>` : ''}
-    ${view.scopes.includes('players') ? `<h3>Player activity</h3>${view.players.map(p=>`<p>${safe(p.name)} · ${safe(p.activity)}</p>`).join('') || '<p>No current player snapshot.</p>'}` : ''}`;
+    ${view.scopes.includes('players') ? `<h3>Online players</h3><p>${Number.isInteger(view.playerCount) ? safe(String(view.playerCount)) : 'Waiting for a current reading.'}</p>` : ''}`;
 }
 
 export function sharedPage() {

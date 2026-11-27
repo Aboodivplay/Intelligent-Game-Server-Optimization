@@ -7,7 +7,7 @@ const origin = process.env.TEST_ORIGIN || 'http://127.0.0.1:4173';
 const browser = await chromium.launch({channel:process.env.TEST_BROWSER_CHANNEL || 'chrome'});
 try {
   for (const loader of ['Forge','Fabric']) {
-    for (const version of ['1.20.1','26.3']) {
+    for (const version of ['1.20.1','1.21.4','26.3']) {
       const page = await browser.newPage();
       const errors = [];
       page.on('pageerror', e => errors.push(e.message));
@@ -27,6 +27,12 @@ try {
           server = {id:serverId,...fields,threshold:80,manualOverride:false,online:false};
           return route.fulfill({status:201,json:{server,agentKey:fixtureKey}});
         }
+        if (path === '/api/servers/'+serverId && req.method() === 'PATCH') {
+          const changes = req.postDataJSON();
+          assert.equal(changes.minecraftVersion, '26.1.2');
+          server = {...server, ...changes};
+          return route.fulfill({json:{server}});
+        }
         return route.fulfill({status:404,json:{error:'Unexpected fixture request'}});
       });
       await page.goto(origin+'/#minecraft');
@@ -44,6 +50,22 @@ try {
       await modal.getByRole('button',{name:'Download igso.properties'}).click();
       assert.equal((await download).suggestedFilename(),'igso.properties');
       await modal.getByRole('button',{name:'Close'}).click();
+      if (version === '1.21.4') {
+        await page.getByRole('heading',{name:loader+' '+version+' setup'}).waitFor();
+        assert.equal(await page.locator('#content a[href$=".jar"]').count(),0);
+        await page.getByRole('button',{name:'Open Settings'}).click();
+        await page.getByLabel('Minecraft version').selectOption('26.1.2');
+        await page.getByRole('button',{name:'Save policy'}).click();
+        await page.getByText('Server policy saved.').waitFor();
+        await page.reload();
+        await page.getByRole('button',{name:'Settings',exact:true}).click();
+        assert.equal(await page.getByLabel('Minecraft version').inputValue(),'26.1.2');
+        await page.getByRole('button',{name:'Agent setup',exact:true}).click();
+        await page.getByRole('heading',{name:loader+' 26.1.2 setup'}).waitFor();
+        assert.deepEqual(errors,[]);
+        await page.close();
+        continue;
+      }
       await page.getByRole('heading',{name:loader+' '+version+' monitoring'}).waitFor();
       const filename='igso-'+loader.toLowerCase()+'-'+version+'.jar';
       const jar=page.getByRole('link',{name:filename,exact:true});

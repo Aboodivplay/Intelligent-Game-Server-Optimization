@@ -64,8 +64,8 @@ begin
   perform pg_temp.require((select last_seen=sample_time and sample_interval=2 from public.igso_servers where id=server_a), 'heartbeat and interval do not regress');
   perform pg_temp.require(public.igso_deliver_sample(server_c,reverse(key_hash),newest,sample_time,2,reading || '{"platform":"Fabric"}'::jsonb) = 'stored', 'Fabric stores its own server-scoped sample');
   visible := public.igso_observer_view(member_b,server_a);
-  perform pg_temp.require(visible->'online' = 'true'::jsonb and jsonb_array_length(visible->'telemetry')=1 and visible->'players'='[]'::jsonb, 'overview only');
-  perform pg_temp.require((visible - array['id','name','online','scopes','telemetry','players']) = '{}'::jsonb, 'shared response exposes only observer fields');
+  perform pg_temp.require(visible->'online' = 'true'::jsonb and jsonb_array_length(visible->'telemetry')=1 and visible->'playerCount'='null'::jsonb, 'overview only');
+  perform pg_temp.require((visible - array['id','name','online','scopes','telemetry','players','playerCount']) = '{}'::jsonb, 'shared response exposes only observer fields');
   perform pg_temp.require(((visible->'telemetry'->0) - array['timestamp','tps','cpu','memory','mspt','entities','players']) = '{}'::jsonb, 'unapproved metric fields withheld');
   perform pg_temp.require(public.igso_observer_view(outsider_c,server_a) is null and public.igso_observer_view(member_b,server_c) is null, 'other accounts and servers isolated');
 
@@ -73,17 +73,19 @@ begin
   visible := public.igso_observer_view(member_b,server_a);
   perform pg_temp.require(visible->'scopes'='["history"]'::jsonb and jsonb_array_length(visible->'telemetry')=2 and (visible#>>'{telemetry,0,cpu}')::int=5, 'history scope uses chronological source time');
   update public.igso_invitations set scopes=array['players'] where id=invitation;
-  update public.igso_servers set tracking_enabled=true, player_snapshot='[{"name":"TestMiner","activity":"Moving","uuid":"private","world":"world","x":30,"y":60,"z":90}]' where id=server_a;
   visible := public.igso_observer_view(member_b,server_a);
-  perform pg_temp.require(visible->'telemetry'='[]'::jsonb and visible->'players'='[{"name":"TestMiner","activity":"Moving"}]'::jsonb, 'players only, coordinates and UUID withheld');
-  update public.igso_servers set tracking_enabled=false where id=server_a;
-  perform pg_temp.require(public.igso_observer_view(member_b,server_a)->'players'='[]'::jsonb, 'tracking disabled');
-  update public.igso_servers set tracking_enabled=true, last_seen=now()-interval '5.9 seconds' where id=server_a;
+  perform pg_temp.require(visible->'telemetry'='[]'::jsonb and visible->'playerCount'='1'::jsonb, 'player-only permission shows a count');
+  update public.igso_servers set last_seen=now()-interval '5.9 seconds' where id=server_a;
   perform pg_temp.require(public.igso_observer_view(member_b,server_a)->'online'='true'::jsonb, 'fresh before three intervals');
   update public.igso_servers set last_seen=now()-interval '6 seconds' where id=server_a;
   visible := public.igso_observer_view(member_b,server_a);
-  perform pg_temp.require(visible->'online'='false'::jsonb and visible->'players'='[]'::jsonb, 'stale at three intervals');
-  update public.igso_servers set loader='Paper' where id=server_a;
+  perform pg_temp.require(visible->'online'='false'::jsonb and visible->'playerCount'='null'::jsonb, 'stale at three intervals');
+  begin
+    update public.igso_servers set loader='Paper' where id=server_a;
+    raise exception 'Unsupported loader was accepted';
+  exception when check_violation then null;
+  end;
+  update public.igso_servers set loader='Fabric' where id=server_a;
   perform pg_temp.require((select last_seen is null and sample_interval is null and not tracking_enabled and not console_enabled
     from public.igso_servers where id=server_a), 'switching loader clears the previous heartbeat and controls');
 

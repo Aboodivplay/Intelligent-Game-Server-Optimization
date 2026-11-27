@@ -1,3 +1,4 @@
+import { minecraftVersions, minecraftLoaders } from './minecraft-versions.js';
 import { createClient } from 'npm:@supabase/supabase-js@2.118.0';
 
 // Database admin credentials are injected by Supabase, never sent to GitHub.
@@ -6,7 +7,7 @@ const publicKey = Deno.env.get('SUPABASE_ANON_KEY')!;
 const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 const admin = createClient(projectUrl, serviceKey, { auth: { persistSession: false, autoRefreshToken: false } });
 const allowedOrigin = 'https://aboodivplay.github.io';
-const serverFields = 'id,name,threshold,manual_override,last_seen,tracking_enabled,console_enabled,minecraft_version,loader,sample_interval';
+const serverFields = 'id,name,threshold,manual_override,last_seen,minecraft_version,loader,sample_interval';
 
 function reply(data: unknown, status = 200, origin = '') {
   return new Response(JSON.stringify(data), { status, headers: {
@@ -66,15 +67,15 @@ function checked(result: { error: unknown; data: any }) {
 
 // Older clients omit the target. Their saved connections can pick a release later.
 function checkMinecraftVersion(version: unknown) {
-  if (version !== undefined && version !== '1.20.1' && version !== '26.3') {
-    reject('Choose Minecraft 1.20.1 or 26.3.');
+  if (version !== undefined && (typeof version !== 'string' || !minecraftVersions.includes(version))) {
+    reject('Choose a listed Minecraft Java release from 1.20.1 through 26.3.');
   }
 }
 
 function presentServer(server: any) {
   return {
     id: server.id, name: server.name, threshold: server.threshold, minecraftVersion: server.minecraft_version, loader: server.loader, intervalSeconds: server.sample_interval,
-    manualOverride: server.manual_override, trackingEnabled: server.tracking_enabled, consoleEnabled: server.console_enabled, lastSeen: server.last_seen,
+    manualOverride: server.manual_override, lastSeen: server.last_seen,
     online: !!server.last_seen && Date.now() - Date.parse(server.last_seen) < (server.sample_interval ? 3000 * server.sample_interval : 30000),
   };
 }
@@ -107,7 +108,7 @@ function selectedScopes(value: unknown) {
 }
 
 function checkLoader(loader: unknown) {
-  if (loader !== undefined && !['Paper','Forge','Fabric'].includes(String(loader))) reject('Choose a supported server loader.');
+  if (typeof loader !== 'string' || !minecraftLoaders.includes(loader)) reject('Choose Forge or Fabric as the server software.');
 }
 
 // The database stores the code hash. Only the original invitation response contains the code.
@@ -192,46 +193,12 @@ Deno.serve(async request => {
       if (!/^[a-f0-9]{64}$/.test(token)) reject('Invalid agent credentials.', 401);
       const sample = await body(request);
       const credential = await hash(token);
-      const server = checked(await admin.from('igso_servers').select('id,last_seen,loader').eq('id', String(sample.serverId || '')).eq('agent_key_hash', credential).maybeSingle());
+      const server = checked(await admin.from('igso_servers').select('id,loader').eq('id', String(sample.serverId || '')).eq('agent_key_hash', credential).maybeSingle());
       if (!server) reject('Invalid agent credentials.', 401);
-      if (server.loader !== 'Paper') {
-        if (sample.platform !== server.loader) reject('The configured loader and the reporting agent do not match.',409);
-        return await modSample(sample,server,credential,origin);
+      if (!minecraftLoaders.includes(server.loader) || sample.platform !== server.loader) {
+        reject('Choose the matching Forge or Fabric loader in Settings.', 409);
       }
-      if (sample.platform === 'Forge' || sample.platform === 'Fabric') reject('Choose the matching loader in Settings.',409);
-      if (server.last_seen && Date.now() - Date.parse(server.last_seen) < 2000) reject('Sample received too quickly.', 429);
-      validateSample(sample);
-      const playerStates = [];
-      if (sample.trackingEnabled === true && Array.isArray(sample.playerStates)) {
-        if (sample.playerStates.length > 200) reject('Player snapshot exceeds 200 players.');
-        for (const player of sample.playerStates) {
-          if (!player || typeof player.name !== 'string' || !/^[A-Za-z0-9_]{1,16}$/.test(player.name) || typeof player.uuid !== 'string' || !/^[a-f0-9-]{36}$/.test(player.uuid) || typeof player.world !== 'string' || player.world.length > 100) reject('Invalid player snapshot.');
-          if (![player.x,player.y,player.z].every(n => Number.isFinite(n) && Math.abs(n) <= 32000000) || !['AFK','Moving','Fighting','Idle'].includes(player.activity)) reject('Invalid player position.');
-          playerStates.push({uuid:player.uuid,name:player.name,world:player.world,x:player.x,y:player.y,z:player.z,activity:player.activity});
-        }
-      }
-      const timestamp = new Date().toISOString();
-      const payload = { timestamp, cpu: sample.cpu, memory: sample.memory, tps: sample.tps, entities: sample.entities, players: sample.players, memoryUsedMb: sample.memoryUsedMb, memoryMaxMb: sample.memoryMaxMb, platform: sample.platform || 'Paper', minecraftVersion: sample.minecraftVersion };
-      checked(await admin.from('igso_telemetry').insert({ server_id: server.id, recorded_at: timestamp, payload }));
-      const heartbeat = checked(await admin.from('igso_servers')
-        .update({ last_seen: timestamp, player_snapshot: playerStates, tracking_enabled: sample.trackingEnabled === true, console_enabled: sample.consoleEnabled === true })
-        .eq('id', server.id).eq('loader','Paper').eq('agent_key_hash',credential).select('id').maybeSingle());
-      if (!heartbeat) reject('The agent configuration changed. Check the server settings.',409);
-      // Acknowledgements belong only to this authenticated agent and server.
-      for (const result of Array.isArray(sample.commandResults) ? sample.commandResults.slice(0,10) : []) {
-        if (!/^[a-f0-9-]{36}$/.test(result.id || '') || !['completed','rejected'].includes(result.status) || typeof result.output !== 'string') continue;
-        checked(await admin.from('igso_commands').update({status: result.status, output: result.output.slice(0,4000)}).eq('id',result.id).eq('server_id',server.id).eq('status','sent'));
-      }
-      const commands = [];
-      if (sample.consoleEnabled === true) {
-        const pending = checked(await admin.from('igso_commands').select('id,command').eq('server_id',server.id).eq('status','queued').gt('expires_at',timestamp).order('created_at').limit(3));
-        for (const command of pending) {
-          // Compare-and-set claims once. Lost deliveries are never silently replayed.
-          const claimed = checked(await admin.from('igso_commands').update({status:'sent'}).eq('id',command.id).eq('status','queued').gt('expires_at',timestamp).select('id,command'));
-          commands.push(...claimed);
-        }
-      }
-      return reply({ received: true, commands }, 201, origin);
+      return await modSample(sample, server, credential, origin);
     }
     // Verify JWTs with Auth, rather than trusting a decoded client-side claim.
     const userClient = createClient(projectUrl, publicKey, {
@@ -269,7 +236,7 @@ Deno.serve(async request => {
       if (existing.error) reject('Could not verify server limit.', 500);
       if ((existing.count || 0) >= 10) reject('Limit of ten server connections reached.');
       const key = newKey();
-      const server = checked(await admin.from('igso_servers').insert({ owner_id: userId, name, loader:input.loader || 'Paper', minecraft_version: input.minecraftVersion, agent_key_hash: await hash(key) }).select(serverFields).single());
+      const server = checked(await admin.from('igso_servers').insert({ owner_id: userId, name, loader:input.loader, minecraft_version: input.minecraftVersion, agent_key_hash: await hash(key) }).select(serverFields).single());
       await recordAudit(userId, 'Server registered', name);
       return reply({ server: presentServer(server), agentKey: key }, 201, origin);
     }
@@ -296,20 +263,6 @@ Deno.serve(async request => {
       }
       reject('Method not allowed.',405);
     }
-    const commandRoute = path.match(/^\/servers\/([a-f0-9-]{36})\/commands$/);
-    if (commandRoute && request.method === 'POST') {
-      const server = checked(await userClient.from('igso_servers').select(serverFields).eq('id',commandRoute[1]).maybeSingle());
-      if (!server) reject('Server not found.',404);
-      if (!presentServer(server).online || !server.console_enabled) reject('The agent must be online with remote console enabled.',409);
-      const input = await body(request);
-      const command = typeof input.command === 'string' ? input.command.trim().replace(/^\//,'') : '';
-      if (!command || command.length > 256 || /[\r\n\x00-\x1f\x7f]/.test(command)) reject('Use one command, up to 256 characters.');
-      const recent = checked(await admin.from('igso_commands').select('id').eq('server_id',server.id).gt('created_at',new Date(Date.now()-5000).toISOString()).limit(1));
-      if (recent.length) reject('Wait five seconds between commands.',429);
-      const created = checked(await admin.from('igso_commands').insert({server_id:server.id,command}).select('id').single());
-      await recordAudit(userId,'Console command queued',server.name + ': ' + command.split(' ')[0]);
-      return reply({id:created.id,queued:true},202,origin);
-    }
     const match = path.match(/^\/servers\/([a-f0-9-]{36})(\/key)?$/);
     if (match && ['PATCH', 'POST', 'DELETE'].includes(request.method)) {
       // This lookup is constrained by both the JWT and database RLS.
@@ -331,7 +284,7 @@ Deno.serve(async request => {
       if (match[2] || request.method !== 'PATCH') reject('Method not allowed.', 405);
       const input = await body(request);
       checkMinecraftVersion(input.minecraftVersion);
-      checkLoader(input.loader);
+      if (input.loader !== undefined) checkLoader(input.loader);
       const name = input.name === undefined ? server.name : input.name;
       const threshold = input.threshold === undefined ? server.threshold : input.threshold;
       const override = input.manualOverride === undefined ? server.manual_override : input.manualOverride;
@@ -356,9 +309,6 @@ Deno.serve(async request => {
       if (id && !servers.some((server: any) => server.id === id)) reject('Server not found.', 404);
       const oldest = new Date(Date.now() - 30 * 86400000).toISOString();
       const rows = id ? checked(await userClient.from('igso_telemetry').select('payload').eq('server_id', id).gte('recorded_at', oldest).order('recorded_at', { ascending: false }).limit(300)) : [];
-      const liveServer = servers.find((server:any) => server.id === id);
-      const snapshot = id && presentServer(liveServer).online ? checked(await userClient.from('igso_servers').select('player_snapshot').eq('id',id).single()).player_snapshot : [];
-      const commands = id ? checked(await userClient.from('igso_commands').select('id,created_at,expires_at,status,command,output').eq('server_id',id).order('created_at',{ascending:false}).limit(30)) : [];
       const auditStart = new Date(Date.now() - 90 * 86400000).toISOString();
       const [logResult, viewResult] = await Promise.all([
         userClient.from('igso_audit').select('id::text,recorded_at,action,detail')
@@ -370,7 +320,7 @@ Deno.serve(async request => {
         id: row.id, timestamp: row.recorded_at, action: row.action, detail: row.detail,
         cleared: BigInt(row.id) <= throughId,
       }));
-      return reply({ playerStates: snapshot, commands, servers: servers.map(presentServer), telemetry: rows.reverse().map((row: any) => row.payload), audit }, 200, origin);
+      return reply({ servers: servers.map(presentServer), telemetry: rows.reverse().map((row: any) => row.payload), audit }, 200, origin);
     }
     reject('Endpoint not found.', 404);
   } catch (error) {

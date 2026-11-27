@@ -38,7 +38,7 @@ async function attach(page, owner) {
     if (path === '/api/shared') return reply({servers:!owner && invite?.active ? [{id:server.id,name:server.name}] : []});
     if (!owner && invite?.active && path === '/api/shared/' + server.id) {
       return reply({id:server.id,name:server.name,online:true,scopes:invite.scopes,
-        telemetry:invite.scopes.some(s=>s==='overview'||s==='history') ? [{timestamp:'2026-11-24T12:00:00Z',cpu:12,memory:30,tps:20,mspt:22}] : [],players:[]});
+        telemetry:invite.scopes.some(s=>s==='overview'||s==='history') ? [{timestamp:'2026-11-24T12:00:00Z',cpu:12,memory:30,tps:20,mspt:22}] : [],playerCount:invite.scopes.includes('players') ? 2 : null});
     }
     unexpected.push(method + ' ' + path); return reply({error:'Unexpected fixture request'},404);
   });
@@ -72,10 +72,13 @@ try {
   const row=owner.locator('.invite-entry').filter({hasText:recipient});
   await row.getByLabel('Overview').uncheck();
   await row.getByLabel('Telemetry history').check();
+  await row.getByLabel('Online player count').check();
   await row.getByRole('button',{name:'Save access'}).click();
   await owner.getByText('Access updated.').waitFor();
   await player.reload();
   await player.getByRole('heading',{name:'Telemetry history'}).waitFor();
+  await player.getByRole('heading',{name:'Online players'}).waitFor();
+  await player.getByText('2',{exact:true}).waitFor();
   assert.equal(await player.getByRole('heading',{name:'Overview',exact:true}).count(),0);
   await row.getByRole('button',{name:'Revoke'}).click();
   await owner.getByText('Access revoked.').waitFor();

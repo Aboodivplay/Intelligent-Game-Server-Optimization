@@ -27,7 +27,7 @@ try {
     page.on('pageerror', error => errors.push(error.message));
     let throughId = 0;
     let dashboardFailure = '';
-    const entries = [{ id: '41', action: 'Server registered', detail: 'Paper', timestamp: '2026-11-20T10:00:00Z' }];
+    const entries = [{ id: '41', action: 'Server registered', detail: 'Forge', timestamp: '2026-11-20T10:00:00Z' }];
 
     // Only API responses are fixtures. The HTML, styles, artwork and controls are served from this checkout.
     await page.route('**/api/**', async route => {
@@ -85,7 +85,14 @@ try {
     await page.emulateMedia({ reducedMotion: 'reduce' });
 
     await page.locator('#connect-server').click();
-    assert.deepEqual(await page.locator('#minecraft-version option').evaluateAll(options => options.map(option => option.value)), ['', '1.20.1', '26.3']);
+    assert.deepEqual(await page.locator('#server-loader option').evaluateAll(options => options.map(option => option.value)), ['', 'Forge', 'Fabric']);
+    assert.deepEqual(await page.locator('#minecraft-version option').evaluateAll(options => options.map(option => option.value)), [
+      '',
+      '1.20.1', '1.20.2', '1.20.3', '1.20.4', '1.20.5', '1.20.6',
+      '1.21', '1.21.1', '1.21.2', '1.21.3', '1.21.4', '1.21.5',
+      '1.21.6', '1.21.7', '1.21.8', '1.21.9', '1.21.10', '1.21.11',
+      '26.1', '26.1.1', '26.1.2', '26.2', '26.3',
+    ]);
     await page.getByRole('button', { name: 'Cancel' }).click();
     await page.getByRole('button', { name: 'Remediation' }).click();
     const clear = page.getByRole('button', { name: 'Clear history', exact: true });

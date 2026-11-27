@@ -1,16 +1,16 @@
 import { agentEndpoint, escapeHtml as safe } from './api.js?v=accounts-20261120';
 
-export function loaderField(selected = 'Paper') {
-  return `<label for="server-loader">Server software</label><select id="server-loader" name="loader">
-    ${['Paper','Forge','Fabric'].map(name=>`<option ${selected===name ? 'selected' : ''}>${name}</option>`).join('')}</select>`;
+import { minecraftLoaders } from './supabase/functions/igso-api/minecraft-versions.js';
+
+export function loaderField(selected = '') {
+  return `<label for="server-loader">Server software</label><select id="server-loader" name="loader" required>
+    <option value="" disabled ${selected ? '' : 'selected'}>Choose your server software</option>
+    ${minecraftLoaders.map(name => `<option value="${name}" ${selected === name ? 'selected' : ''}>${name}</option>`).join('')}</select>`;
 }
 
-// Existing Paper servers use YAML. Both mod loaders read the same properties file.
+// Both monitoring mods read the same properties file from the server's config folder.
 export function agentConfig(server, key) {
-  if (server.loader === 'Forge' || server.loader === 'Fabric') {
-    return {name:'igso.properties', folder:'config/', text:`endpoint=${agentEndpoint()}\nserver-id=${server.id}\nagent-key=${key}\ninterval-seconds=2\n`};
-  }
-  return {name:'config.yml',folder:'plugins/IGSOAgent/',text:`endpoint: ${agentEndpoint()}\nserver-id: ${server.id}\nagent-key: ${key}\ninterval-seconds: 5\nplayer-tracking: true\nremote-console:\n  enabled: false\n  allowed-commands: [list, say, time, weather, difficulty, save-all]\n`};
+  return {name:'igso.properties', folder:'config/', text:`endpoint=${agentEndpoint()}\nserver-id=${server.id}\nagent-key=${key}\ninterval-seconds=2\n`};
 }
 
 export function modGuide(server) {
@@ -21,7 +21,6 @@ export function modGuide(server) {
     <ol><li>Stop the dedicated server. Place <a href="mods/${safe(jar)}" download>${safe(jar)}</a> in its <code>mods/</code> directory.
     ${loader==='Fabric' ? 'Install Fabric API for the same Minecraft version alongside it.' : ''}</li>
     <li>Place the private <code>igso.properties</code> file from registration in <code>config/</code>.
-    Switching from Paper? Use the server ID and agent key from your existing configuration in this properties file.
     If you have lost the key, Settings lets you replace it and download the new configuration.</li>
     <li>Start the server. Overview shows CPU, heap, TPS, MSPT, entities and players after the first sample.</li></ol>
     <details><summary>Agent configuration format</summary><pre class="code">endpoint=${safe(agentEndpoint())}

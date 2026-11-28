@@ -25,3 +25,22 @@ const dashboard = await fetch(config.supabaseUrl + '/functions/v1/' + config.fun
 assert.equal(dashboard.status, 401);
 assert.equal(dashboard.headers.get('access-control-allow-origin'), origin);
 console.log('Pages and Auth responded. The workspace rejected a request without a session.');
+
+// An expired confirmation exercises the redirect without sending an email or using a real login code.
+for (const explicit of [false, true]) {
+  const link = new URL(auth + '/verify');
+  link.searchParams.set('type','signup');
+  link.searchParams.set('token','0000000000000000000000000000000000000000000000000000000000000000');
+  if (explicit) link.searchParams.set('redirect_to', config.websiteUrl);
+  const response = await fetch(link, {redirect:'manual'});
+  const destination = response.headers.get('location');
+  if (!destination) {
+    console.warn('Auth returned HTTP '+response.status+' without an email redirect.');
+    continue;
+  }
+  const target = new URL(destination);
+  const correct = target.origin + target.pathname === config.websiteUrl;
+  const label = explicit ? 'requested callback' : 'default Site URL';
+  console.log(label + ' points to ' + target.origin + target.pathname);
+  if (!correct) console.warn('::warning::Update the hosted Auth URL Configuration for the '+label+'.');
+}

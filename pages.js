@@ -1,4 +1,4 @@
-import { escapeHtml as safe } from './api.js?v=accounts-20261120';
+import { escapeHtml as safe } from './api.js?v=auth-20261128b';
 
 export function brand() {
   return '<a class="brand" href="#home"><span>INTELLIGENT GAME<span>SERVER OPTIMIZATION</span></span></a>';
@@ -108,6 +108,12 @@ export function authPage(signup = false) {
       <div id="form-error" class="form-error" role="alert"></div>
       <button class="button primary full" type="submit">${signup ? 'Create account' : 'Log in'}</button>
     </form>
+    ${signup ? '' : `<details><summary>Email link opened localhost?</summary>
+      <p>In the same browser where you requested the email, paste the address from that tab here.</p>
+      <form id="local-email-link" autocomplete="off"><label for="return-address">Return address</label>
+        <input id="return-address" type="password" autocomplete="off" spellcheck="false" required>
+        <p class="form-error" role="alert"></p><button type="submit" class="button">Finish email verification</button>
+      </form></details>`}
     <p class="auth-switch">${signup ? 'Already have an account?' : 'New to the project?'}
       <a href="#${signup ? 'login' : 'signup'}">${signup ? 'Log in' : 'Create an account'}</a></p>`);
 }

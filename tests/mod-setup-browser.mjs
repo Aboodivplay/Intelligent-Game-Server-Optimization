@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { chromium } from 'playwright-core';
+import { readFile } from 'node:fs/promises';
 
 // Check the UI contract for registering each supported mod loader and game version.
 // Run this from the same checkout as the four published JAR files and collector.zip.
@@ -43,13 +44,15 @@ try {
       await page.getByRole('button',{name:'Create connection'}).click();
       const modal=page.getByRole('dialog');
       await modal.getByRole('heading',{name:'Save your agent configuration'}).waitFor();
-      const configuration=await modal.locator('pre').innerText();
-      assert.ok(configuration.includes('server-id='+serverId) && configuration.includes('agent-key='+fixtureKey));
-      assert.match(configuration,/interval-seconds=2/);
+      assert.ok(!(await page.locator('body').innerText()).includes(fixtureKey));
       const download=page.waitForEvent('download');
       await modal.getByRole('button',{name:'Download igso.properties'}).click();
-      assert.equal((await download).suggestedFilename(),'igso.properties');
-      await modal.getByRole('button',{name:'Close'}).click();
+      const file = await download;
+      assert.equal(file.suggestedFilename(),'igso.properties');
+      const configuration = await readFile(await file.path(), 'utf8');
+      assert.ok(configuration.includes('server-id='+serverId) && configuration.includes('agent-key='+fixtureKey));
+      assert.match(configuration,/interval-seconds=2/);
+      await modal.waitFor({state:'hidden'});
       if (version === '1.21.4') {
         await page.getByRole('heading',{name:loader+' '+version+' setup'}).waitFor();
         assert.equal(await page.locator('#content a[href$=".jar"]').count(),0);
@@ -72,6 +75,12 @@ try {
       assert.equal(await jar.getAttribute('href'),'mods/'+filename);
       const collector=page.getByRole('link',{name:'Download SQLite collector'});
       assert.equal(await collector.getAttribute('href'),'collector.zip');
+      if (version === '1.20.1') {
+        const guide = page.locator('#content details');
+        await guide.locator('summary').click();
+        await page.waitForTimeout(5500);
+        assert.equal(await guide.getAttribute('open'),'');
+      }
       // These static downloads must resolve to ZIP/JAR bytes, not an HTML fallback.
       for (const link of [jar,collector]) {
         const response=await page.request.get(new URL(await link.getAttribute('href'),origin+'/').href);

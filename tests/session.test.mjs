@@ -90,3 +90,41 @@ test('signup without a display name sends no profile metadata or repeated passwo
     else delete globalThis.localStorage;
   }
 });
+
+test('recovery uses the published URL and a localhost callback requires the original browser proof', async t => {
+  const storage = new Map();
+  const previous = Object.getOwnPropertyDescriptor(globalThis, 'localStorage');
+  Object.defineProperty(globalThis, 'localStorage', {configurable:true, value:{
+    getItem: key => storage.get(key) || null,
+    setItem: (key, value) => storage.set(key, value),
+    removeItem: key => storage.delete(key),
+  }});
+  t.after(() => {
+    if (previous) Object.defineProperty(globalThis, 'localStorage', previous);
+    else delete globalThis.localStorage;
+  });
+  const code = '00000000-0000-4000-8000-000000000001';
+  const local = 'http://localhost:3000/?code=' + code;
+  let exchanges = 0;
+  const auth = await fixture(t,(url, options) => {
+    if (url.pathname.endsWith('/recover')) {
+      assert.equal(url.searchParams.get('redirect_to'), 'https://aboodivplay.github.io/Intelligent-Game-Server-Optimization/');
+      assert.equal(JSON.parse(options.body).code_challenge_method,'s256');
+      return {body:{}};
+    }
+    if (url.pathname.endsWith('/user')) return {body:profile};
+    assert.equal(url.searchParams.get('grant_type'),'pkce');
+    const body = JSON.parse(options.body);
+    assert.equal(body.auth_code,code);
+    assert.equal(body.code_verifier,JSON.parse(storage.get('igso-email-proof')).verifier);
+    exchanges++;
+    return {body:session('recovery')};
+  });
+  assert.ok((await auth.completeLocalEmailLink(local)).linkError);
+  await auth.sendPasswordReset('sam@example.invalid');
+  assert.ok((await auth.completeLocalEmailLink(local.replace('localhost','example.invalid'))).linkError);
+  assert.equal(exchanges,0);
+  assert.equal((await auth.completeLocalEmailLink(local)).recovery,true);
+  assert.equal(exchanges,1);
+  assert.equal(storage.size,0);
+});

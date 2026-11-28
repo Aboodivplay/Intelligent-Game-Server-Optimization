@@ -1,7 +1,7 @@
-import { invitePanel } from './sharing.js?v=releases-20261128';
-import { loaderField, modGuide } from './monitoring.js?v=releases-20261128';
-import { escapeHtml as safe, agentEndpoint } from './api.js?v=accounts-20261120';
-import { brand } from './pages.js?v=releases-20261128';
+import { invitePanel } from './sharing.js?v=auth-20261128b';
+import { loaderField, modGuide } from './monitoring.js?v=auth-20261128b';
+import { escapeHtml as safe, agentEndpoint } from './api.js?v=auth-20261128b';
+import { brand } from './pages.js?v=auth-20261128b';
 import { minecraftVersions } from './supabase/functions/igso-api/minecraft-versions.js';
 
 export const dashboardTabs = ['Overview', 'Live players', 'Telemetry history', 'Predictions', 'Remediation', 'Agent setup', 'Settings'];

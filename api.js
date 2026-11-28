@@ -1,5 +1,5 @@
 import { config } from './config.js?v=accounts-20261120';
-import { authenticate, currentUser, logout, sessionToken } from './session.js?v=accounts-20261120';
+import { authenticate, currentUser, logout, sessionToken } from './session.js?v=auth-20261128b';
 
 const isLocal = ['localhost', '127.0.0.1'].includes(location.hostname);
 export const agentEndpoint = () => config.supabaseUrl ? config.supabaseUrl + '/functions/v1/' + config.functionName + '/telemetry' : '';

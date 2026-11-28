@@ -1,4 +1,4 @@
-import { api, escapeHtml as safe } from './api.js?v=accounts-20261120';
+import { api, escapeHtml as safe } from './api.js?v=auth-20261128b';
 
 const sections = { overview: 'Overview', history: 'Telemetry history', players: 'Online player count' };
 

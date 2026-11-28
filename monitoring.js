@@ -1,4 +1,4 @@
-import { agentEndpoint, escapeHtml as safe } from './api.js?v=accounts-20261120';
+import { agentEndpoint, escapeHtml as safe } from './api.js?v=auth-20261128b';
 
 import { minecraftLoaders } from './supabase/functions/igso-api/minecraft-versions.js';
 

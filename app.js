@@ -1,15 +1,16 @@
-import { manageInvites, bindShared, sharedPage } from './sharing.js?v=releases-20261128';
-import { agentConfig, loaderField } from './monitoring.js?v=releases-20261128';
-import { showAccountSecurity } from './account-security.js?v=accounts-20261120';
-import { api, openApp, escapeHtml as safe, download, agentEndpoint } from './api.js?v=accounts-20261120';
-import { readEmailAction, sendPasswordReset, changePassword, resendConfirmation, verifyAuthenticator, clearSession } from './session.js?v=accounts-20261120';
-import { landing, authPage, gameSelection, verificationPage, passwordChangePage } from './pages.js?v=releases-20261128';
-import { versionField, dashboardShell, overview, history, predictions, remediation, agentSetup, settingsPage, livePlayers } from './dashboard.js?v=releases-20261128';
+import { manageInvites, bindShared, sharedPage } from './sharing.js?v=auth-20261128b';
+import { agentConfig, loaderField } from './monitoring.js?v=auth-20261128b';
+import { showAccountSecurity } from './account-security.js?v=auth-20261128b';
+import { api, openApp, escapeHtml as safe, download, agentEndpoint } from './api.js?v=auth-20261128b';
+import { completeLocalEmailLink, readEmailAction, sendPasswordReset, changePassword, resendConfirmation, verifyAuthenticator, clearSession } from './session.js?v=auth-20261128b';
+import { landing, authPage, gameSelection, verificationPage, passwordChangePage } from './pages.js?v=auth-20261128b';
+import { versionField, dashboardShell, overview, history, predictions, remediation, agentSetup, settingsPage, livePlayers } from './dashboard.js?v=auth-20261128b';
 
 // Only navigation and current UI state live here. Server records come from the API.
 let user = null;
 let pendingLogin = null;
 let recoveringPassword = false;
+let emailLinkMessage = '';
 let dashboard = { servers: [], telemetry: [], audit: [] };
 let serverId = '';
 let loadedServerId = '';
@@ -153,6 +154,7 @@ async function renderRoute() {
   if (route === 'login' || route === 'signup') {
     if (user) { location.hash = 'games'; return; }
     app.innerHTML = authPage(route === 'signup');
+    if (route === 'login') document.querySelector('#form-error').textContent = emailLinkMessage;
   } else if (route === 'games') {
     app.innerHTML = gameSelection(user);
     animateSections();
@@ -240,6 +242,7 @@ async function submitAuth(event) {
 
 // A password or recovery link is only the first step for enrolled accounts.
 function finishLogin(account, recovery = false) {
+  emailLinkMessage = '';
   if (account.authenticators?.length) {
     pendingLogin = { account, recovery };
     location.hash = 'verify-login';
@@ -312,10 +315,13 @@ function passwordResetDialog() {
 function showAgentConfig(server, key) {
   const config = agentConfig(server, key);
   showModal(`<h2>Save your agent configuration</h2>
-    <p>Place this file in <code>${safe(config.folder)}</code> on your Minecraft server. The key is shown once.</p>
-    <pre class="code">${safe(config.text)}</pre><div class="actions"><button class="button" data-close>Close</button>
+    <p>Download <strong>${safe(config.name)}</strong> and place it in <code>${safe(config.folder)}</code> on your Minecraft server. This file contains the private key for ${safe(server.name)}.</p>
+    <div class="actions"><button class="button" data-close>Close</button>
     <button class="button primary" id="download-config">Download ${safe(config.name)}</button></div>`);
-  modal.querySelector('#download-config').onclick = () => download(config.name, config.text, 'text/plain');
+  modal.querySelector('#download-config').onclick = () => {
+    download(config.name, config.text, 'text/plain');
+    modal.close();
+  };
 }
 
 function connectServer() {
@@ -419,6 +425,19 @@ function bindControls(scope = document) {
     catch (error) { toast(error.message); }
     finally { button.disabled = false; }
   });
+  scope.querySelector('#local-email-link')?.addEventListener('submit', async event => {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const field = form.querySelector('input');
+    const button = form.querySelector('button');
+    button.disabled = true;
+    const result = await completeLocalEmailLink(field.value.trim());
+    field.value = '';
+    if (!form.isConnected) return;
+    button.disabled = false;
+    if (result.user) finishLogin(result.user, result.recovery);
+    else form.querySelector('[role="alert"]').textContent = result.linkError;
+  });
   scope.querySelector('#forgot-password')?.addEventListener('click', passwordResetDialog);
   scope.querySelector('#password')?.addEventListener('input', event => {
     const guide = document.querySelector('#password-guide');
@@ -519,11 +538,13 @@ function bindControls(scope = document) {
 // Refresh only the live workspace. Do not erase forms or let an API failure leave stale live readings.
 setInterval(async () => {
   if (refreshShared && !document.hidden) return refreshShared();
-  if (location.hash !== '#minecraft' || !user || document.hidden || requestInProgress || modal.open || activeTab === 'Settings') return;
+  if (location.hash !== '#minecraft' || !user || document.hidden || requestInProgress || modal.open || ['Settings', 'Agent setup'].includes(activeTab)) return;
   if (document.activeElement?.closest('.workspace-main button:focus-visible, input, select, textarea')) return;
   requestInProgress = true;
-  try { await loadDashboard(); if (location.hash === '#minecraft') drawDashboard(); }
-  catch (error) { if (location.hash === '#minecraft') showWorkspaceError(error); }
+  const tab = activeTab;
+  const stillViewing = () => location.hash === '#minecraft' && activeTab === tab && !modal.open;
+  try { await loadDashboard(); if (stillViewing()) drawDashboard(); }
+  catch (error) { if (stillViewing()) showWorkspaceError(error); }
   finally { requestInProgress = false; }
 }, 5000);
 
@@ -546,7 +567,7 @@ async function start() {
     try { user = (await api('/auth/me')).user; }
     catch { user = null; }
   }
+  emailLinkMessage = emailAction?.linkError || '';
   await renderRoute();
-  if (emailAction?.linkError) toast('This email link expired or is invalid. Request a new confirmation or password reset.');
 }
 start();

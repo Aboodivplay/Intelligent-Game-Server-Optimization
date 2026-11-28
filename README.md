@@ -30,6 +30,6 @@ See the [GP2 design comparison](docs/gp2-alignment.md) for the implemented featu
 
 ## Deployment notes
 
-The website URL, public project URL and publishable key are in `config.js`. Use only the public key in the frontend. The Supabase redirect allowlist must include the dashboard URL used for confirmation and recovery.
+The website URL, public project URL and publishable key are in `config.js`. Use only the public key in the frontend. Set **Authentication → URL Configuration → Site URL** to `https://aboodivplay.github.io/Intelligent-Game-Server-Optimization/` and add the same address under **Redirect URLs**. Confirmation and recovery share this callback. For an older link that opens localhost, use **Email link opened localhost?** on the published login page in the original browser. Supabase Auth stores salted bcrypt password hashes. Server configuration downloads contain a separate private telemetry key.
 
 The project uses the Free plan. If the site loads but the account service is unreachable, check the project status in Supabase. A paused project can be restored from the project dashboard. Public signup and password recovery also need a mail sender that can deliver to the intended users. Supabase's default sender is limited to project team addresses.

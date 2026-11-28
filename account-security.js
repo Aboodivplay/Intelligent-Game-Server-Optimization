@@ -1,6 +1,6 @@
-import { currentUser, enrollAuthenticator, removeAuthenticator, verifyAuthenticator } from './session.js?v=accounts-20261120';
-import { escapeHtml as safe } from './api.js?v=accounts-20261120';
-import { codeFields } from './pages.js?v=accounts-20261120';
+import { currentUser, enrollAuthenticator, removeAuthenticator, verifyAuthenticator } from './session.js?v=auth-20261128b';
+import { escapeHtml as safe } from './api.js?v=auth-20261128b';
+import { codeFields } from './pages.js?v=auth-20261128b';
 
 // Keep setup secrets inside the dialog. Only a successful code check enables a factor.
 export function showAccountSecurity(user, { showModal, onUpdate, toast }) {

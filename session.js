@@ -151,41 +151,55 @@ export async function logout() {
 }
 
 export async function sendPasswordReset(email) {
-  await authRequest('/recover?redirect_to=' + encodeURIComponent(config.websiteUrl + '#reset-password'), {
+  await authRequest('/recover?redirect_to=' + encodeURIComponent(config.websiteUrl), {
     body: { email: email.trim().toLowerCase(), ...await emailProof('recovery') },
   });
 }
 
-export async function readEmailAction() {
-  const url = new URL(location.href);
-  const code = url.searchParams.get('code');
-  const fragment = new URLSearchParams(location.hash.slice(1));
-  // Refuse legacy implicit-token links. Sessions must come from a password
-  // login or an email authorization code tied to this browser's proof key.
-  if (fragment.has('access_token') || fragment.has('refresh_token')) {
-    history.replaceState(null, '', url.pathname + '#login');
-    return null;
-  }
-  if (fragment.has('error_code') || fragment.has('error')) {
-    history.replaceState(null, '', url.pathname + '#login');
-    return { linkError: true };
-  }
-  if (!code) return null;
-  url.searchParams.delete('code');
-  history.replaceState(null, '', url.pathname + url.search + '#login');
+const invalidEmailLink = 'This email link has expired or was already used. For a confirmed account, log in with your password. For a password reset, request a fresh link.';
+
+async function exchangeEmailCode(code) {
   let proof;
-  try {
-    proof = JSON.parse(localStorage.getItem(EMAIL_PROOF_KEY) || 'null');
-    localStorage.removeItem(EMAIL_PROOF_KEY);
+  try { proof = JSON.parse(localStorage.getItem(EMAIL_PROOF_KEY)); }
+  catch { /* Storage may be unavailable in a private browser. */ }
+  if (!proof?.verifier || !['signup','recovery'].includes(proof.type) || !Number.isFinite(proof.created) || Date.now() - proof.created > 3600000) {
+    return { linkError: 'Open the link in the browser where you requested it. If you just confirmed your email, you can log in with your password here.' };
   }
-  catch { proof = null; }
-  if (!proof || Date.now() - proof.created > 3600000) return { linkError: true };
   try {
     const result = await authRequest('/token?grant_type=pkce', { body: { auth_code: code, code_verifier: proof.verifier } });
     acceptSession(result);
+    // The code has been consumed. Fetch the current authenticator list before choosing the next screen.
+    try { localStorage.removeItem(EMAIL_PROOF_KEY); } catch { /* The code is already single-use. */ }
     const user = await currentUser();
     return { user, recovery: proof.type === 'recovery' };
-  } catch { clearSession(); return { linkError: true }; }
+  } catch (error) {
+    clearSession();
+    return { linkError: error.status === 400 || error.status === 403 || error.status === 422 ? invalidEmailLink : error.message };
+  }
+}
+
+export async function readEmailAction() {
+  const url = new URL(location.href);
+  const fragment = new URLSearchParams(url.hash.slice(1));
+  const failed = [url.searchParams, fragment].some(params =>
+    ['error', 'error_code', 'access_token', 'refresh_token'].some(key => params.has(key)));
+  const code = url.searchParams.get('code');
+  if (!failed && !code) return null;
+  history.replaceState(null, '', url.pathname + '#login');
+  return failed ? { linkError: invalidEmailLink } : exchangeEmailCode(code);
+}
+
+// Earlier confirmation emails can leave the browser on a localhost callback.
+// Read only its code. The request still needs the verifier from this site's original browser.
+export async function completeLocalEmailLink(value) {
+  let url;
+  try { url = new URL(value); } catch { /* Show the same instructions for malformed URLs. */ }
+  const code = url?.searchParams.get('code');
+  if (url?.origin !== 'http://localhost:3000' || url.pathname !== '/' || url.username || url.password ||
+      !/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(code || '') || url.searchParams.getAll('code').length !== 1) {
+    return { linkError: 'Paste the full localhost:3000 address from the address bar after opening your email link.' };
+  }
+  return exchangeEmailCode(code);
 }
 
 export async function changePassword(password) {

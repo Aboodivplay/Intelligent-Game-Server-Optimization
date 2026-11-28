@@ -10,14 +10,29 @@ permissions:
   contents: read
 
 jobs:
+  targets:
+    runs-on: ubuntu-24.04
+    outputs:
+      matrix: ${{ steps.list.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v5
+      - id: list
+        run: |
+          python3 - <<'PY' >> "$GITHUB_OUTPUT"
+          import json
+          targets = json.load(open("mod-agent/targets.json"))
+          rows = [{"loader": loader, "game": game, "jdk": 25 if loader == "fabric" else cfg["java"]} for game,cfg in targets.items() for loader in ("forge","fabric") if loader == "fabric" or cfg["forge"]]
+          print("matrix=" + json.dumps({"include": rows}))
+          PY
+
   build:
+    needs: targets
     runs-on: ubuntu-24.04
     timeout-minutes: 35
     strategy:
       fail-fast: false
-      matrix:
-        loader: [forge, fabric]
-        game: ['1.20.1', '26.3']
+      max-parallel: 16
+      matrix: ${{ fromJSON(needs.targets.outputs.matrix) }}
     steps:
       - uses: actions/checkout@v5
         with:
@@ -25,7 +40,7 @@ jobs:
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: ${{ matrix.loader == 'forge' && matrix.game == '1.20.1' && '17' || '25' }}
+          java-version: ${{ matrix.jdk }}
       - name: Build the dedicated server mod
         run: python3 mod-agent/build.py ${{ matrix.loader }} ${{ matrix.game }} --out dist
       - name: Verify queued delivery
@@ -35,7 +50,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: igso-${{ matrix.loader }}-${{ matrix.game }}
-          path: dist/*.jar
+          path: dist/*
 
   package:
     name: Prepare verified dashboard downloads
@@ -55,7 +70,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          for file in downloads/*.jar; do
+          for file in downloads/*.jar downloads/*.zip; do
             sha=$(jq -n --arg content "$(base64 -w0 "$file")" '{content:$content,encoding:"base64"}' |
               gh api --method POST "repos/$GITHUB_REPOSITORY/git/blobs" --input - --jq '.sha')
             echo "mods/$(basename "$file") $sha"

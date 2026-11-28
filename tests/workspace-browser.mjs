@@ -21,6 +21,20 @@ async function checkPan(element) {
 
 const browser = await chromium.launch({ channel: 'chrome' });
 try {
+  const login = await browser.newPage();
+  await login.route('**/api/auth/me', route => route.fulfill({json:{user:null}}));
+  await login.route('**/auth/v1/resend?**', route => route.fulfill({json:{}}));
+  await login.route('**/auth/v1/recover?**', route => route.fulfill({json:{}}));
+  await login.goto('http://127.0.0.1:4173/#login');
+  await login.getByLabel('Email address').fill('owner@example.invalid');
+  await login.getByRole('button',{name:'Resend confirmation'}).click();
+  await login.getByText(/If confirmation is needed/).waitFor();
+  await login.getByRole('button',{name:'Forgot password?'}).click();
+  await login.getByRole('dialog').getByLabel('Email address').fill('owner@example.invalid');
+  await login.getByRole('button',{name:'Send reset link'}).click();
+  await login.getByText(/If this account exists/).waitFor();
+  assert.equal(await login.locator('#local-email-link').count(),0);
+  await login.close();
   for (const width of [1440, 390]) {
     const page = await browser.newPage({ viewport: { width, height: 900 }, reducedMotion: 'reduce' });
     const errors = [];

@@ -1,4 +1,5 @@
 import { minecraftVersions, minecraftLoaders } from './minecraft-versions.js';
+import { predictServerRisk } from './prediction.js';
 import { createClient } from 'npm:@supabase/supabase-js@2.118.0';
 
 // Database admin credentials are injected by Supabase, never sent to GitHub.
@@ -320,7 +321,12 @@ Deno.serve(async request => {
         id: row.id, timestamp: row.recorded_at, action: row.action, detail: row.detail,
         cleared: BigInt(row.id) <= throughId,
       }));
-      return reply({ servers: servers.map(presentServer), telemetry: rows.reverse().map((row: any) => row.payload), audit }, 200, origin);
+      // Only the signed-in owner's selected server supplies this forecast window.
+      const ownedServers = servers.map(presentServer);
+      const selected = ownedServers.find((server: any) => server.id === id);
+      const telemetry = rows.reverse().map((row: any) => row.payload);
+      const prediction = predictServerRisk(telemetry, selected);
+      return reply({ servers: ownedServers, telemetry, prediction, audit }, 200, origin);
     }
     reject('Endpoint not found.', 404);
   } catch (error) {

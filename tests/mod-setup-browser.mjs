@@ -21,7 +21,9 @@ try {
         const req=route.request();
         const path=new URL(req.url()).pathname;
         if (path === '/api/auth/me') return route.fulfill({json:{user:{id:'owner',name:'Admin'}}});
-        if (path === '/api/dashboard') return route.fulfill({json:{servers:server?[server]:[],telemetry:sample?[sample]:[],audit:[],commands:[],playerStates:[]}});
+        if (path === '/api/dashboard') return route.fulfill({json:{servers:server?[server]:[],telemetry:sample?[sample]:[],prediction:sample?{
+          state:'ready',score:.827,threshold:.8,elevated:true,horizonMinutes:5,modelVersion:'igso-lstm-5m-v1',observedAt:sample.timestamp
+        }:{state:'offline'},audit:[],commands:[],playerStates:[]}});
         if (path === '/api/servers' && req.method() === 'POST') {
           const fields = req.postDataJSON();
           assert.deepEqual(fields,{name:serverName,minecraftVersion:version,loader});
@@ -93,6 +95,9 @@ try {
       await page.reload();
       await page.getByText('Tick time',{exact:true}).waitFor();
       assert.match(await page.locator('.metric').filter({hasText:'Tick time'}).innerText(),/26\.7\s*ms/);
+      await page.getByRole('button',{name:'Predictions',exact:true}).click();
+      await page.getByRole('heading',{name:'82.7% model score'}).waitFor();
+      await page.getByText('ABOVE THRESHOLD',{exact:true}).waitFor();
       assert.deepEqual(errors,[]);
       await page.close();
       console.log(loader+' '+version+' registration, configuration, downloads and tick time passed.');

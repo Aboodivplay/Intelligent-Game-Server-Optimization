@@ -2,9 +2,9 @@ name: Workspace checks
 on:
   push:
     branches: [main]
-    paths: ['*.js', '*.html', '*.css', 'assets/minecraft/**', 'tests/**', 'mods/**', 'collector/**', '.github/workflows/workspace-checks.yml']
+    paths: ['*.js', '*.html', '*.css', 'assets/minecraft/**', 'tests/**', 'ml/**', 'supabase/functions/igso-api/**', 'mods/**', 'collector/**', '.github/workflows/workspace-checks.yml']
   pull_request:
-    paths: ['*.js', '*.html', '*.css', 'assets/minecraft/**', 'tests/**', 'mods/**', 'collector/**', '.github/workflows/workspace-checks.yml']
+    paths: ['*.js', '*.html', '*.css', 'assets/minecraft/**', 'tests/**', 'ml/**', 'supabase/functions/igso-api/**', 'mods/**', 'collector/**', '.github/workflows/workspace-checks.yml']
 
 permissions:
   contents: read
@@ -20,7 +20,7 @@ jobs:
       - uses: actions/setup-node@v5
         with:
           node-version: 22
-      - run: node --test tests/session.test.mjs tests/audit.test.mjs
+      - run: node --test tests/session.test.mjs tests/audit.test.mjs tests/prediction.test.mjs
       - name: Use the runner's Chrome browser
         run: npm install --no-save --package-lock=false playwright-core@1.55.1
       - name: Check desktop and mobile workspaces

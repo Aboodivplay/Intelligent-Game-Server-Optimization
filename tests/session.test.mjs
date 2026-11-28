@@ -91,7 +91,7 @@ test('signup without a display name sends no profile metadata or repeated passwo
   }
 });
 
-test('recovery uses the published URL and a localhost callback requires the original browser proof', async t => {
+test('recovery uses the published URL and the email callback requires the original browser proof', async t => {
   const storage = new Map();
   const previous = Object.getOwnPropertyDescriptor(globalThis, 'localStorage');
   Object.defineProperty(globalThis, 'localStorage', {configurable:true, value:{
@@ -104,7 +104,12 @@ test('recovery uses the published URL and a localhost callback requires the orig
     else delete globalThis.localStorage;
   });
   const code = '00000000-0000-4000-8000-000000000001';
-  const local = 'http://localhost:3000/?code=' + code;
+  const link = new URL('https://aboodivplay.github.io/Intelligent-Game-Server-Optimization/?code=' + code);
+  for (const [key, value] of Object.entries({ location: link, history: { replaceState() {} } })) {
+    const original = Object.getOwnPropertyDescriptor(globalThis,key);
+    Object.defineProperty(globalThis,key,{configurable:true,value});
+    t.after(() => original ? Object.defineProperty(globalThis,key,original) : delete globalThis[key]);
+  }
   let exchanges = 0;
   const auth = await fixture(t,(url, options) => {
     if (url.pathname.endsWith('/recover')) {
@@ -120,11 +125,10 @@ test('recovery uses the published URL and a localhost callback requires the orig
     exchanges++;
     return {body:session('recovery')};
   });
-  assert.ok((await auth.completeLocalEmailLink(local)).linkError);
+  assert.ok((await auth.readEmailAction()).linkError);
   await auth.sendPasswordReset('sam@example.invalid');
-  assert.ok((await auth.completeLocalEmailLink(local.replace('localhost','example.invalid'))).linkError);
   assert.equal(exchanges,0);
-  assert.equal((await auth.completeLocalEmailLink(local)).recovery,true);
+  assert.equal((await auth.readEmailAction()).recovery,true);
   assert.equal(exchanges,1);
   assert.equal(storage.size,0);
 });

@@ -2,9 +2,9 @@ import { manageInvites, bindShared, sharedPage } from './sharing.js?v=auth-20261
 import { agentConfig, loaderField } from './monitoring.js?v=auth-20261128b';
 import { showAccountSecurity } from './account-security.js?v=auth-20261128b';
 import { api, openApp, escapeHtml as safe, download, agentEndpoint } from './api.js?v=auth-20261128b';
-import { completeLocalEmailLink, readEmailAction, sendPasswordReset, changePassword, resendConfirmation, verifyAuthenticator, clearSession } from './session.js?v=auth-20261128b';
-import { landing, authPage, gameSelection, verificationPage, passwordChangePage } from './pages.js?v=auth-20261128b';
-import { versionField, dashboardShell, overview, history, predictions, remediation, agentSetup, settingsPage, livePlayers } from './dashboard.js?v=auth-20261128b';
+import { readEmailAction, sendPasswordReset, changePassword, resendConfirmation, verifyAuthenticator, clearSession } from './session.js?v=auth-20261128b';
+import { landing, authPage, gameSelection, verificationPage, passwordChangePage } from './pages.js?v=forecast-20261128';
+import { versionField, dashboardShell, overview, history, predictions, remediation, agentSetup, settingsPage, livePlayers } from './dashboard.js?v=forecast-20261128';
 
 // Only navigation and current UI state live here. Server records come from the API.
 let user = null;
@@ -424,19 +424,6 @@ function bindControls(scope = document) {
     try { await resendConfirmation(email.value); toast('If confirmation is needed, a new link will arrive. Open the latest email.'); }
     catch (error) { toast(error.message); }
     finally { button.disabled = false; }
-  });
-  scope.querySelector('#local-email-link')?.addEventListener('submit', async event => {
-    event.preventDefault();
-    const form = event.currentTarget;
-    const field = form.querySelector('input');
-    const button = form.querySelector('button');
-    button.disabled = true;
-    const result = await completeLocalEmailLink(field.value.trim());
-    field.value = '';
-    if (!form.isConnected) return;
-    button.disabled = false;
-    if (result.user) finishLogin(result.user, result.recovery);
-    else form.querySelector('[role="alert"]').textContent = result.linkError;
   });
   scope.querySelector('#forgot-password')?.addEventListener('click', passwordResetDialog);
   scope.querySelector('#password')?.addEventListener('input', event => {

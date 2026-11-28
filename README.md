@@ -10,6 +10,10 @@ In **Minecraft → Settings → Manage player access**, the server owner can cre
 
 The [Forge and Fabric setup](mod-agent/README.md) covers all four mod builds. Use the [Python/SQLite collector](collector/README.md) for durable local storage and optional forwarding to the hosted dashboard.
 
+## Crash predictions
+
+Open **Minecraft → Predictions** after an agent has reported about five uninterrupted minutes of readings. The hosted API scores the next five minutes with a six-input adaptation of the supplied LSTM. The [model notes and evaluation](ml/README.md) document the live inputs, training procedure and synthetic test results.
+
 ## Accounts
 
 Use an email address and a unique password to create an account. A display name is optional. Open the confirmation email in the same browser that requested it. Password recovery uses the same browser check. The page keeps signed-in sessions in memory, so refreshing or closing it requires another login.
@@ -30,6 +34,6 @@ See the [GP2 design comparison](docs/gp2-alignment.md) for the implemented featu
 
 ## Deployment notes
 
-The website URL, public project URL and publishable key are in `config.js`. Use only the public key in the frontend. Set **Authentication → URL Configuration → Site URL** to `https://aboodivplay.github.io/Intelligent-Game-Server-Optimization/` and add the same address under **Redirect URLs**. Confirmation and recovery share this callback. For an older link that opens localhost, use **Email link opened localhost?** on the published login page in the original browser. Supabase Auth stores salted bcrypt password hashes. Server configuration downloads contain a separate private telemetry key.
+The website URL, public project URL and publishable key are in `config.js`. Use only the public key in the frontend. Set **Authentication → URL Configuration → Site URL** to `https://aboodivplay.github.io/Intelligent-Game-Server-Optimization/` and add the same address under **Redirect URLs**. Confirmation and recovery share this callback. Supabase Auth stores salted bcrypt password hashes. Server configuration downloads contain a separate private telemetry key.
 
 The project uses the Free plan. If the site loads but the account service is unreachable, check the project status in Supabase. A paused project can be restored from the project dashboard. Public signup and password recovery also need a mail sender that can deliver to the intended users. Supabase's default sender is limited to project team addresses.

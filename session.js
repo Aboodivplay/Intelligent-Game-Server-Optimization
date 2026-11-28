@@ -189,19 +189,6 @@ export async function readEmailAction() {
   return failed ? { linkError: invalidEmailLink } : exchangeEmailCode(code);
 }
 
-// Earlier confirmation emails can leave the browser on a localhost callback.
-// Read only its code. The request still needs the verifier from this site's original browser.
-export async function completeLocalEmailLink(value) {
-  let url;
-  try { url = new URL(value); } catch { /* Show the same instructions for malformed URLs. */ }
-  const code = url?.searchParams.get('code');
-  if (url?.origin !== 'http://localhost:3000' || url.pathname !== '/' || url.username || url.password ||
-      !/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(code || '') || url.searchParams.getAll('code').length !== 1) {
-    return { linkError: 'Paste the full localhost:3000 address from the address bar after opening your email link.' };
-  }
-  return exchangeEmailCode(code);
-}
-
 export async function changePassword(password) {
   const token = await sessionToken();
   if (!token) throw new Error('This reset link expired. Request a new one.');
